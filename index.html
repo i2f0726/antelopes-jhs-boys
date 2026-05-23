@@ -329,7 +329,7 @@ if ('serviceWorker' in navigator) {
 </style>
 
 <!-- スプラッシュ画面 -->
-<div id="splashScreen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#111111;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;transition:opacity 0.4s ease;">
+<div id="splashScreen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#111111;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;transition:opacity 1s ease;">
   <div style="width:120px;height:120px;border-radius:22px;overflow:hidden;margin-bottom:20px;box-shadow:0 8px 32px rgba(122,16,32,0.5);">
     <img src="icon-180.png" alt="アンテロープス" style="width:100%;height:100%;object-fit:contain;display:block;">
   </div>
@@ -2180,8 +2180,8 @@ async function savePwChange(){
     setTimeout(function(){
       splash.style.display = 'none';
       pw.style.display = 'flex';
-    }, 400);
-  }, 1000);
+    }, 1000);
+  }, 3000);
 })();
 
 // Firestoreのリアルタイム同期を開始
