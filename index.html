@@ -1,4 +1,4 @@
-<style>html,body{margin:0;padding:0;background:#111111;}</style>
+<style>html,body{margin:0;padding:0;background:#ffffff;}</style>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="color-scheme" content="light">
 <!-- PWA設定 -->
@@ -55,11 +55,11 @@ if ('serviceWorker' in navigator) {
     --theme-text-on: #ffffff;     /* メインカラー上に乗せる文字色 */
   }
   * { margin:0; padding:0; box-sizing:border-box; }
-  .pw-screen { display:flex; align-items:center; justify-content:center; min-height:100svh; background:#111111; }
-  .pw-box { border:1px solid var(--theme-main); border-radius:20px; padding:36px 28px; text-align:center; width:300px; background:#1c1c1e; box-shadow:0 8px 40px rgba(0,0,0,0.6); }
+  .pw-screen { display:flex; align-items:center; justify-content:center; min-height:100svh; background:#ffffff; }
+  .pw-box { border:1px solid var(--theme-main); border-radius:20px; padding:36px 28px; text-align:center; width:300px; background:#ffffff; box-shadow:0 4px 24px rgba(0,0,0,0.12); }
   .pw-title { color:var(--theme-main); font-size:21px; font-weight:700; margin-bottom:4px; }
-  .pw-sub { color:#aaa; font-size:14px; margin-bottom:20px; }
-  .pin-disp { font-size:32px; letter-spacing:16px; color:#fff; margin:12px 0; min-height:40px; }
+  .pw-sub { color:#777; font-size:14px; margin-bottom:20px; }
+  .pin-disp { font-size:32px; letter-spacing:16px; color:#111; margin:12px 0; min-height:40px; }
   .pin-err { color:#e24b4a; font-size:14px; min-height:18px; margin-bottom:8px; }
   .np { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
   .np-btn { display:block; padding:14px; font-size:23px; font-weight:700; border-radius:10px; background-color:var(--theme-main) !important; color:var(--theme-text-on) !important; cursor:pointer; text-align:center; font-family:sans-serif; -webkit-text-fill-color:var(--theme-text-on) !important; border:none; outline:none; pointer-events:auto; -webkit-appearance:none; box-sizing:border-box; }
@@ -330,7 +330,7 @@ if ('serviceWorker' in navigator) {
 </style>
 
 <!-- スプラッシュ画面：最初から表示、JSで3秒後フェード -->
-<div id="splashScreen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#111111;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;transition:opacity 1s ease;">
+<div id="splashScreen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#111111;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;transition:background-color 1s ease;">
   <div style="width:140px;height:140px;border-radius:28px;overflow:hidden;margin-bottom:24px;box-shadow:0 8px 40px rgba(0,0,0,0.6);">
     <img src="icon-180.png" alt="アンテロープス" style="width:100%;height:100%;object-fit:contain;display:block;">
   </div>
@@ -2179,7 +2179,7 @@ async function savePwChange(){
     var pw = document.getElementById('pwScreen');
     if(!splash || !pw) return;
     setTimeout(function(){
-      splash.style.opacity = '0';
+      splash.style.backgroundColor = '#ffffff';
       setTimeout(function(){
         splash.style.display = 'none';
         pw.style.display = 'flex';
