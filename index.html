@@ -1,3 +1,4 @@
+<style>html,body{margin:0;padding:0;background:#111111;}</style>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="color-scheme" content="light">
 <!-- PWA設定 -->
@@ -2171,17 +2172,26 @@ async function savePwChange(){
 }
 
 // ========== 起動 ==========
-// スプラッシュ画面：1秒表示してからパスワード画面へ
+// スプラッシュ画面：3秒表示 → 1秒フェードアウト → パスワード画面
+// DOMContentLoadedで即タイマー開始（loadイベント待ちにしない）
 (function(){
-  var splash = document.getElementById('splashScreen');
-  var pw = document.getElementById('pwScreen');
-  setTimeout(function(){
-    splash.style.opacity = '0';
+  function startSplash(){
+    var splash = document.getElementById('splashScreen');
+    var pw = document.getElementById('pwScreen');
+    if(!splash || !pw) return;
     setTimeout(function(){
-      splash.style.display = 'none';
-      pw.style.display = 'flex';
-    }, 1000);
-  }, 3000);
+      splash.style.opacity = '0';
+      setTimeout(function(){
+        splash.style.display = 'none';
+        pw.style.display = 'flex';
+      }, 1000);
+    }, 3000);
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', startSplash);
+  } else {
+    startSplash();
+  }
 })();
 
 // Firestoreのリアルタイム同期を開始
