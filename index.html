@@ -404,6 +404,12 @@ if ('serviceWorker' in navigator) {
         </div>
       </div>
       <div class="ps-grades">
+<<<<<<< HEAD
+=======
+        <div class="ps-grade-item"><span class="ps-grade-num" id="stat6">0</span><span class="ps-grade-label">6年</span></div>
+        <div class="ps-grade-item"><span class="ps-grade-num" id="stat5">0</span><span class="ps-grade-label">5年</span></div>
+        <div class="ps-grade-item"><span class="ps-grade-num" id="stat4">0</span><span class="ps-grade-label">4年</span></div>
+>>>>>>> 2646a91633f900f6f1a232ad14c5174b88fa6e72
         <div class="ps-grade-item"><span class="ps-grade-num" id="stat3">0</span><span class="ps-grade-label">3年</span></div>
         <div class="ps-grade-item"><span class="ps-grade-num" id="stat2">0</span><span class="ps-grade-label">2年</span></div>
         <div class="ps-grade-item"><span class="ps-grade-num" id="stat1">0</span><span class="ps-grade-label">1年</span></div>
@@ -462,6 +468,12 @@ if ('serviceWorker' in navigator) {
     <div class="grade-bar">
       <div class="grade-btns">
         <button class="grade-btn active" onclick="filterGrade('all')" id="gb-all">全員</button>
+<<<<<<< HEAD
+=======
+        <button class="grade-btn" onclick="filterGrade(6)" id="gb-6">6年生</button>
+        <button class="grade-btn" onclick="filterGrade(5)" id="gb-5">5年生</button>
+        <button class="grade-btn" onclick="filterGrade(4)" id="gb-4">4年生</button>
+>>>>>>> 2646a91633f900f6f1a232ad14c5174b88fa6e72
         <button class="grade-btn" onclick="filterGrade(3)" id="gb-3">3年生</button>
         <button class="grade-btn" onclick="filterGrade(2)" id="gb-2">2年生</button>
         <button class="grade-btn" onclick="filterGrade(1)" id="gb-1">1年生</button>
@@ -669,7 +681,11 @@ const firebaseConfig = {
   projectId: "antelopes-hs-dashboard",
   storageBucket: "antelopes-hs-dashboard.firebasestorage.app",
   messagingSenderId: "929985303695",
+<<<<<<< HEAD
   appId: "1:929985303695:web:f51d460d45f290d4eb4cfa"
+=======
+  appId: "1:929985303695:web:870c0bd00395cf6aeb4cfa"
+>>>>>>> 2646a91633f900f6f1a232ad14c5174b88fa6e72
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
@@ -832,9 +848,15 @@ function switchTab(tab){
 
 // 一括進級
 function showPromotion(){
+<<<<<<< HEAD
   const grade6=players.filter(p=>p.grade===3).length;
   let msg=`全選手の学年を+1年します。`;
   if(grade6>0) msg+=`\n中学3年生${grade6}名のデータと写真は削除されます。`;
+=======
+  const grade6=players.filter(p=>p.grade===6).length;
+  let msg=`全選手の学年を+1年します。`;
+  if(grade6>0) msg+=`\n小学6年生${grade6}名のデータと写真は削除されます。`;
+>>>>>>> 2646a91633f900f6f1a232ad14c5174b88fa6e72
   document.getElementById('confirmMsg').textContent=msg;
   document.getElementById('confirmBanner').style.display='block';
 }
@@ -842,9 +864,15 @@ function hidePromotion(){
   document.getElementById('confirmBanner').style.display='none';
 }
 async function executePromotion(){
+<<<<<<< HEAD
   const grade6=players.filter(p=>p.grade===3).length;
   let bodyMsg=`全選手の学年を+1年します。`;
   if(grade6>0) bodyMsg+=`\n中学3年生${grade6}名のデータと写真は削除されます。\n\nこの操作は取り消せません。よろしいですか？`;
+=======
+  const grade6=players.filter(p=>p.grade===6).length;
+  let bodyMsg=`全選手の学年を+1年します。`;
+  if(grade6>0) bodyMsg+=`\n小学6年生${grade6}名のデータと写真は削除されます。\n\nこの操作は取り消せません。よろしいですか？`;
+>>>>>>> 2646a91633f900f6f1a232ad14c5174b88fa6e72
   else bodyMsg+=`\n\nこの操作は取り消せません。よろしいですか？`;
   showConfirmModal({
     title:'一括進級を実行',
@@ -854,12 +882,21 @@ async function executePromotion(){
     onOk: async ()=>{
       try{
         const batch=db.batch();
+<<<<<<< HEAD
         // 3年生を削除
         players.filter(p=>p.grade===3).forEach(p=>{
           batch.delete(db.collection('players').doc(p.id));
         });
         // 残りを+1学年
         players.filter(p=>p.grade!==3).forEach(p=>{
+=======
+        // 6年生を削除
+        players.filter(p=>p.grade===6).forEach(p=>{
+          batch.delete(db.collection('players').doc(p.id));
+        });
+        // 残りを+1学年
+        players.filter(p=>p.grade!==6).forEach(p=>{
+>>>>>>> 2646a91633f900f6f1a232ad14c5174b88fa6e72
           batch.update(db.collection('players').doc(p.id), {grade: p.grade+1, adminKey:ADMIN_KEY});
         });
         await batch.commit();
@@ -1151,7 +1188,11 @@ function renderEditForm(p){
 
       <label style="font-size:14px;color:var(--color-text-secondary);display:block;margin:10px 0 4px;">学年<span style="color:#c00;">*</span></label>
       <select id="fGrade" style="width:100%;padding:9px 12px;border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-secondary);font-size:15px;box-sizing:border-box;">
+<<<<<<< HEAD
         ${[3,2,1].map(g=>`<option value="${g}" ${p&&p.grade===g?'selected':''}>${g}年生</option>`).join('')}
+=======
+        ${[6,5,4,3,2,1].map(g=>`<option value="${g}" ${p&&p.grade===g?'selected':''}>${g}年生</option>`).join('')}
+>>>>>>> 2646a91633f900f6f1a232ad14c5174b88fa6e72
       </select>
 
       <label style="font-size:14px;color:var(--color-text-secondary);display:block;margin:10px 0 4px;">背番号</label>
@@ -1345,7 +1386,11 @@ function renderPlayers(){
   const all=players;
   document.getElementById('statTotal').textContent=all.length;
   for(let g=1; g<=6; g++){
+<<<<<<< HEAD
     const el=document.getElementById('stat'+g); if(el) el.textContent=all.filter(p=>p.grade===g).length;
+=======
+    document.getElementById('stat'+g).textContent=all.filter(p=>p.grade===g).length;
+>>>>>>> 2646a91633f900f6f1a232ad14c5174b88fa6e72
   }
   const hs=all.filter(p=>p.height).map(p=>p.height);
   if(hs.length){

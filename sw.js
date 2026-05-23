@@ -6,7 +6,11 @@
 
 // バージョン番号: index.htmlを更新したらこの数字を上げる
 // （これだけで全ユーザーが自動的に最新版になります）
-const CACHE_VERSION = '2026-05-23-1636';
+<<<<<<< HEAD
+const CACHE_VERSION = '2026-05-23-1729';
+=======
+const CACHE_VERSION = '2026-05-22-0030';
+>>>>>>> 2646a91633f900f6f1a232ad14c5174b88fa6e72
 const CACHE_NAME = `antelopes-${CACHE_VERSION}`;
 
 // オフライン時にも見られるようにキャッシュするファイル
