@@ -328,7 +328,16 @@ if ('serviceWorker' in navigator) {
   }
 </style>
 
-<div class="pw-screen" id="pwScreen">
+<!-- スプラッシュ画面 -->
+<div id="splashScreen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#111111;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;transition:opacity 0.4s ease;">
+  <div style="width:120px;height:120px;border-radius:22px;overflow:hidden;margin-bottom:20px;box-shadow:0 8px 32px rgba(122,16,32,0.5);">
+    <img src="icon-180.png" alt="アンテロープス" style="width:100%;height:100%;object-fit:contain;display:block;">
+  </div>
+  <div style="color:#ffffff;font-size:26px;font-weight:900;letter-spacing:3px;">ANTELOPES</div>
+  <div style="color:#7a1020;font-size:13px;font-weight:700;letter-spacing:3px;margin-top:6px;">BASKETBALL CLUB · KAMIICHI</div>
+</div>
+
+<div class="pw-screen" id="pwScreen" style="display:none;">
   <div class="pw-box">
     <div style="width:64px;height:64px;border-radius:10px;background:transparent;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;overflow:hidden;padding:0;box-sizing:border-box;"><img src="icon-180.png" alt="アンテロープス" style="width:100%;height:100%;object-fit:contain;display:block;"></div>
     <div class="pw-title">ANTELOPES</div>
@@ -2162,6 +2171,19 @@ async function savePwChange(){
 }
 
 // ========== 起動 ==========
+// スプラッシュ画面：1秒表示してからパスワード画面へ
+(function(){
+  var splash = document.getElementById('splashScreen');
+  var pw = document.getElementById('pwScreen');
+  setTimeout(function(){
+    splash.style.opacity = '0';
+    setTimeout(function(){
+      splash.style.display = 'none';
+      pw.style.display = 'flex';
+    }, 400);
+  }, 1000);
+})();
+
 // Firestoreのリアルタイム同期を開始
 startFirestoreSync();
 
