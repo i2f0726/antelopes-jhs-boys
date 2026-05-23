@@ -1,0 +1,9 @@
+{
+  "name": "antelopes-jhs",
+  "version": "1.0.0",
+  "description": "Antelopes 中学生用ダッシュボード - GitHub Pages",
+  "scripts": {
+    "update-version": "node update-version.js",
+    "deploy": "node update-version.js && node deploy.js"
+  }
+}
