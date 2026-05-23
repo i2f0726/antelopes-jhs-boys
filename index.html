@@ -1,0 +1,2184 @@
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="color-scheme" content="light">
+<!-- PWA設定 -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#1a5c2a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="アンテロープス">
+<link rel="apple-touch-icon" href="icon-180.png">
+
+<!-- Service Worker登録（iOS PWAの古いキャッシュ問題を解決） -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then((reg) => {
+        console.log('[SW] 登録成功');
+
+        // 1時間ごとに更新チェック（PWA起動中ずっと開きっぱなしの場合の保険）
+        setInterval(() => reg.update(), 60 * 60 * 1000);
+
+        // 新しいSWが見つかったら自動適用
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', () => {
+            // 新SWがインストール完了 かつ 既存SWがある = 更新あり
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              console.log('[SW] 新バージョンを検出、適用します');
+              newWorker.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        });
+      })
+      .catch((err) => console.log('[SW] 登録失敗', err));
+
+    // SWが切り替わったらページをリロード（最新版を表示）
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return;
+      refreshing = true;
+      window.location.reload();
+    });
+  });
+}
+</script>
+
+<style>
+  /* ===== カラーテーマ（ここを変えれば色違い版が作れます） ===== */
+  :root {
+    --theme-main: #1a5c2a;        /* メインカラー（フォレストグリーン） */
+    --theme-light: #3a9a4a;       /* メインの明るい版 */
+    --theme-dark: #0d2e15;        /* メインの暗い版（バッジ背景など） */
+    --theme-text-on: #ffffff;     /* メインカラー上に乗せる文字色 */
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  .pw-screen { display:flex; align-items:center; justify-content:center; min-height:500px; border-radius:16px; background:#1a1a1a; }
+  .pw-box { border:1px solid var(--theme-main); border-radius:16px; padding:32px 28px; text-align:center; width:300px; background:#222222; }
+  .pw-title { color:var(--theme-main); font-size:21px; font-weight:700; margin-bottom:4px; }
+  .pw-sub { color:#aaa; font-size:14px; margin-bottom:20px; }
+  .pin-disp { font-size:32px; letter-spacing:16px; color:#fff; margin:12px 0; min-height:40px; }
+  .pin-err { color:#e24b4a; font-size:14px; min-height:18px; margin-bottom:8px; }
+  .np { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .np-btn { all:unset; display:block; padding:14px; font-size:23px; font-weight:700; border-radius:10px; background-color:var(--theme-main) !important; color:var(--theme-text-on) !important; cursor:pointer; text-align:center; font-family:sans-serif; -webkit-text-fill-color:var(--theme-text-on) !important; }
+  .np-btn:active { background-color:var(--theme-light) !important; }
+  .app { display:none; position:relative; }
+  .header { background:#111; padding:16px; }
+  .header-inner { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .header-left { display:flex; align-items:center; gap:12px; min-width:0; flex:1; }
+  .header-right { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+  .admin-btn-header { padding:8px 12px; border-radius:8px; border:1.5px solid var(--theme-main); background:#222; color:var(--theme-main); font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap; transition:all 0.15s; }
+  .admin-btn-header:hover { background:var(--theme-main); color:var(--theme-text-on); }
+  .admin-btn-header:active { transform:scale(0.96); }
+  .admin-btn-header.logout { border-color:#e24b4a; color:#e24b4a; background:#2a1414; }
+  .admin-btn-header.logout:hover { background:#e24b4a; color:#fff; }
+  .team-logo { width:48px; height:48px; border-radius:8px; background:var(--theme-main); display:flex; align-items:center; justify-content:center; flex-shrink:0; overflow:hidden; padding:3px; box-sizing:border-box; }
+  .team-logo img { width:100%; height:100%; object-fit:contain; display:block; }
+  .team-name { color:var(--theme-main); font-size:21px; font-weight:900; letter-spacing:1px; }
+  .team-sub { color:#888; font-size:12px; letter-spacing:2px; }
+  .header-stripe { height:3px; background:linear-gradient(90deg,var(--theme-main),var(--theme-light),var(--theme-main)); }
+  .stats-row { display:flex; gap:8px; padding:12px; background:var(--color-background-tertiary); }
+  .stat-card { flex:1; background:var(--color-background-secondary); border-radius:10px; padding:10px; text-align:center; border:0.5px solid var(--color-border-tertiary); }
+  .stat-num { font-size:23px; font-weight:700; color:var(--theme-main); }
+  .stat-label { font-size:12px; color:var(--color-text-secondary); margin-top:2px; }
+
+  /* 選手統計パネル（選手管理タブ内） */
+  .player-stats { background:#111; margin:0; padding:14px 12px; border-bottom:2px solid var(--theme-main); }
+  .ps-main { display:flex; align-items:center; background:#1a1a1a; border-radius:12px; padding:14px 10px; margin-bottom:10px; border:1px solid #333; }
+  .ps-main-item { flex:1; text-align:center; }
+  .ps-main-divider { width:1px; height:38px; background:#333; }
+  .ps-main-label { font-size:12px; color:#aaa; margin-bottom:4px; letter-spacing:1px; font-weight:700; }
+  .ps-main-value { font-size:30px; font-weight:900; color:var(--theme-main); line-height:1; }
+  .ps-unit { font-size:15px; color:#888; margin-left:3px; font-weight:700; }
+  .ps-grades { display:flex; gap:6px; }
+  .ps-grade-item { flex:1; background:#1a1a1a; border-radius:8px; padding:8px 4px; text-align:center; border:1px solid #2a2a2a; display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .ps-grade-num { font-size:21px; font-weight:900; color:#fff; line-height:1; }
+  .ps-grade-label { font-size:12px; color:var(--theme-main); font-weight:700; }
+  .admin-bar { display:flex; justify-content:flex-start; align-items:center; padding:6px 16px; background:var(--color-background-secondary); border-bottom:0.5px solid var(--color-border-tertiary); }
+  .admin-status { font-size:13px; color:var(--color-text-secondary); font-weight:700; letter-spacing:0.5px; }
+  .admin-btn { font-size:13px; padding:5px 14px; border-radius:20px; border:0.5px solid var(--color-border-secondary); background:transparent; cursor:pointer; color:var(--color-text-primary); font-family:inherit; }
+  .admin-btn.logout { background:#fff0f0; color:#c00; border-color:#fcc; }
+  .tabs { display:flex; background:#111; border-bottom:0.5px solid var(--color-border-tertiary); padding:6px 6px 0; gap:4px; }
+  .tab { flex:1; padding:12px 8px; text-align:center; font-size:15px; font-weight:700; cursor:pointer; color:#888; background:#1f1f1f; border-radius:10px 10px 0 0; border:1px solid transparent; border-bottom:none; transition:all 0.15s; }
+  .tab:hover { color:#ccc; background:#2a2a2a; }
+  .tab.active { color:var(--theme-text-on); background:var(--theme-main); border-color:var(--theme-light); box-shadow:0 -2px 8px rgba(0,0,0,0.3); }
+  .toolbar { display:flex; gap:8px; padding:10px 12px; background:var(--color-background-primary); border-bottom:0.5px solid var(--color-border-tertiary); min-height:48px; align-items:center; flex-wrap:wrap; }
+  .tb-gold { padding:7px 16px; border-radius:20px; border:none; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; background:var(--theme-main); color:var(--theme-text-on); }
+  .tb-red { padding:7px 16px; border-radius:20px; border:none; font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; background:#fff0f0; color:#c00; border:0.5px solid #fcc; }
+  .grade-bar { display:flex; gap:8px; padding:8px 12px; background:var(--color-background-primary); border-bottom:0.5px solid var(--color-border-tertiary); align-items:center; }
+  .grade-btns { display:flex; gap:6px; flex:1; overflow-x:auto; }
+  .grade-btn { padding:5px 14px; border-radius:20px; border:0.5px solid var(--color-border-secondary); background:transparent; color:var(--color-text-secondary); font-size:14px; font-weight:700; cursor:pointer; font-family:inherit; white-space:nowrap; }
+  .grade-btn.active { background:var(--theme-main); color:var(--theme-text-on); border-color:var(--theme-main); }
+
+  /* ボール番号検索カード */
+  .ball-search-card { margin:10px 12px; padding:10px 12px; background:#e8f5eb; border:1.5px solid var(--theme-main); border-radius:10px; box-shadow:0 1px 3px rgba(0,0,0,0.05); }
+  .ball-search-label { font-size:14px; font-weight:700; color:var(--theme-dark); margin-bottom:6px; letter-spacing:0.5px; }
+  .search-box { position:relative; display:flex; align-items:center; gap:8px; }
+  .search-box input { flex:1; min-width:0; padding:9px 14px; border:1px solid var(--theme-main); border-radius:8px; background:#fff; color:#111; font-size:17px; font-weight:700; font-family:inherit; box-sizing:border-box; }
+  .search-box input:focus { outline:none; border-color:var(--theme-dark); box-shadow:0 0 0 2px rgba(26,92,42,0.2); }
+  .search-go { flex-shrink:0; width:42px; height:38px; border-radius:8px; border:none; background:var(--theme-main); color:var(--theme-text-on); font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; font-family:inherit; }
+  .search-go:hover { background:var(--theme-dark); }
+  .search-go:active { transform:scale(0.95); }
+  .search-clear { flex-shrink:0; width:38px; height:38px; border-radius:8px; border:none; background:#888; color:#fff; font-size:15px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; padding:0; font-family:inherit; }
+  .search-clear:hover { background:#555; }
+
+  /* 並べ替えプルダウン（grade-bar右端） */
+  .sort-select { padding:6px 8px; border:0.5px solid var(--color-border-secondary); border-radius:8px; background:var(--color-background-secondary); color:var(--color-text-primary); font-size:13px; font-weight:700; font-family:inherit; cursor:pointer; flex-shrink:0; max-width:130px; }
+  .sort-select:focus { outline:none; border-color:var(--theme-main); }
+
+  /* 検索ヒット時のハイライト表示 */
+  .search-hit-banner { padding:8px 12px; background:#e8f5eb; border-bottom:1px solid var(--theme-main); font-size:14px; color:#333; font-weight:700; }
+  .search-hit-banner.empty { background:#fee; border-bottom-color:#c00; color:#c00; }
+
+  /* 確認バナー */
+  .confirm-banner { margin:12px; border-radius:12px; background:#e8f5eb; border:1px solid var(--theme-main); padding:14px 16px; }
+  .confirm-banner p { font-size:15px; font-weight:700; color:#333; margin-bottom:10px; }
+  .confirm-btns { display:flex; gap:8px; }
+  .confirm-btns button { flex:1; padding:10px; border-radius:10px; border:none; font-size:15px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .confirm-exec { background:#c00; color:#fff; }
+  .confirm-cancel { background:#eee; color:#333; }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:14px; padding:14px; background:var(--color-background-tertiary); }
+  .card { background:var(--color-background-primary); border-radius:14px; border:0.5px solid var(--color-border-tertiary); padding:10px; cursor:pointer; position:relative; overflow:hidden; display:flex; flex-direction:column; align-items:center; }
+  .card:hover { border-color:var(--theme-main); }
+  .card-accent { position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,#333,var(--theme-main)); }
+  .card-badges { display:flex; gap:5px; align-items:center; margin-bottom:8px; flex-wrap:wrap; justify-content:center; width:100%; }
+  .grade-badge { background:#333; color:#fff; font-size:12px; font-weight:700; padding:2px 8px; border-radius:6px; }
+  .num-badge { background:#111; color:#fff; font-size:12px; font-weight:700; padding:2px 8px; border-radius:6px; border:1px solid var(--theme-main); }
+  .pos-badge { background:var(--theme-main); color:var(--theme-text-on); font-size:12px; font-weight:700; padding:2px 8px; border-radius:6px; }
+  .bibs-badge { background:#2a2a2a; color:#fff; font-size:10px; font-weight:700; padding:2px 6px; border-radius:5px; border:0.5px solid var(--theme-main); }
+  .ball-badge { background:#fff; color:#333; font-size:10px; font-weight:700; padding:2px 6px; border-radius:5px; border:0.5px solid var(--color-border-tertiary); }
+  .card-photo { width:100%; aspect-ratio:3/4; border-radius:10px; background:var(--color-background-secondary); border:1px solid var(--color-border-tertiary); display:flex; align-items:center; justify-content:center; overflow:hidden; margin-bottom:8px; font-size:13px; color:var(--color-text-secondary); }
+  .card-photo img { width:100%; height:100%; object-fit:cover; }
+  .player-name { font-size:15px; font-weight:700; color:var(--color-text-primary); text-align:center; }
+  .player-roman { font-size:12px; color:var(--color-text-secondary); text-align:center; margin-bottom:3px; }
+  .player-info { font-size:13px; color:var(--color-text-secondary); text-align:center; }
+
+  .cal-wrap { padding:14px; background:var(--color-background-tertiary); }
+  .cal-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+  .cal-title { font-size:18px; font-weight:700; color:var(--color-text-primary); }
+  .cal-nav { background:var(--theme-main); color:var(--theme-text-on); border:none; border-radius:8px; padding:6px 14px; font-size:16px; font-weight:700; cursor:pointer; font-family:inherit; }
+  .cal-grid { background:var(--color-background-primary); border-radius:14px; border:0.5px solid var(--color-border-tertiary); overflow:hidden; }
+  .cal-dow { display:grid; grid-template-columns:repeat(7,1fr); }
+  .cal-dow-cell { text-align:center; padding:8px 4px; font-size:13px; font-weight:700; color:var(--color-text-secondary); }
+  .cal-dow-cell:first-child { color:#e24b4a; }
+  .cal-dow-cell:last-child { color:#4a8ee2; }
+  .cal-days { display:grid; grid-template-columns:repeat(7,1fr); border-top:0.5px solid var(--color-border-tertiary); }
+  .cal-day { min-height:52px; min-width:0; padding:4px; border-right:0.5px solid var(--color-border-tertiary); border-bottom:0.5px solid var(--color-border-tertiary); cursor:pointer; overflow:hidden; }
+  .cal-day:nth-child(7n) { border-right:none; }
+  .cal-day.empty { background:var(--color-background-secondary); cursor:default; }
+  .cal-day.today .cal-day-num { background:var(--theme-main); color:var(--theme-text-on); border-radius:50%; width:22px; height:22px; display:flex; align-items:center; justify-content:center; font-weight:700; }
+  .cal-day:hover:not(.empty) { background:var(--color-background-secondary); }
+  .cal-day-num { font-size:14px; font-weight:700; color:var(--color-text-primary); margin-bottom:2px; width:22px; height:22px; display:flex; align-items:center; justify-content:center; }
+  .cal-day:nth-child(7n+1) .cal-day-num { color:#e24b4a; }
+  .cal-day:nth-child(7n) .cal-day-num { color:#4a8ee2; }
+  .cal-day.holiday .cal-day-num { color:#e24b4a !important; }
+  .cal-day-holiday-name { font-size:9px; color:#e24b4a; font-weight:700; margin-bottom:2px; line-height:1.1; word-break:break-all; overflow:hidden; display:-webkit-box; -webkit-line-clamp:1; -webkit-box-orient:vertical; }
+  .cal-event { font-size:10px; font-weight:700; padding:1px 4px; border-radius:4px; margin-bottom:1px; word-break:break-all; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; line-height:1.2; }
+  .ev-practice { background:#22c55e; color:#fff; }
+  .ev-game { background:#3b82f6; color:#fff; }
+  .ev-tournament { background:#dc2626; color:#fff; }
+  .ev-other { background:#6b7280; color:#fff; }
+  .schedule-list { margin-top:14px; padding:14px 12px; background:#e8f5eb; border-radius:14px; border:1.5px solid var(--theme-main); box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+  .schedule-list:empty, .schedule-list > div:only-child { /* 空のときはbox-shadowを薄く保つだけ */ }
+  .schedule-list-title { font-size:15px; font-weight:700; color:var(--theme-dark); margin-bottom:10px; padding-bottom:8px; border-bottom:1px dashed var(--theme-light); display:flex; align-items:center; gap:6px; }
+  .schedule-item { background:#ffffff; border-radius:10px; border:1px solid var(--theme-light); padding:12px 14px; margin-bottom:8px; display:flex; gap:12px; align-items:flex-start; box-shadow:0 1px 2px rgba(0,0,0,0.03); }
+  .schedule-item:last-child { margin-bottom:0; }
+  /* 地図リンク（住所/施設名タップでGoogle Maps起動） */
+  .map-link { color:#1565c0; text-decoration:underline; cursor:pointer; font-weight:600; word-break:break-all; }
+  .map-link:hover { color:#0d47a1; }
+  .map-link:active { color:#003c8f; }
+  .schedule-date-box { text-align:center; min-width:40px; }
+  .schedule-month { font-size:12px; color:var(--color-text-secondary); }
+  .schedule-day { font-size:25px; font-weight:700; color:var(--theme-main); line-height:1; }
+  .schedule-weekday { font-size:12px; color:var(--color-text-secondary); }
+  .schedule-info { flex:1; }
+  .schedule-type { font-size:12px; font-weight:700; padding:2px 8px; border-radius:6px; display:inline-block; margin-bottom:4px; }
+  .schedule-title { font-size:19px; font-weight:700; color:var(--color-text-primary); margin-bottom:2px; }
+  .schedule-detail { font-size:16px; color:var(--color-text-secondary); }
+  .schedule-edit-btn { background:transparent; border:0.5px solid var(--color-border-secondary); border-radius:8px; padding:4px 10px; font-size:13px; cursor:pointer; color:var(--color-text-secondary); font-family:inherit; }
+  /* 月次固定メッセージカード */
+  .monthly-msg-card { background:#e8f5eb; border:1.5px solid var(--theme-main); border-radius:12px; padding:12px 14px; margin-bottom:12px; box-shadow:0 1px 3px rgba(0,0,0,0.04); }
+  .monthly-msg-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; gap:8px; }
+  .monthly-msg-title { font-size:18px; font-weight:700; color:var(--theme-dark); flex:1; }
+  .monthly-msg-edit-btn { background:var(--theme-main); color:var(--theme-text-on); border:none; border-radius:8px; padding:5px 12px; font-size:13px; font-weight:700; cursor:pointer; font-family:inherit; flex-shrink:0; }
+  .monthly-msg-edit-btn:hover { background:var(--theme-dark); }
+  .monthly-msg-body { font-size:17px; color:var(--color-text-primary); white-space:pre-wrap; line-height:1.6; word-break:break-word; }
+  .monthly-msg-body.empty { color:var(--color-text-secondary); font-style:italic; }
+  /* カレンダー曜日ヘッダーの設定情報（固定会場・時間・当番ラベル） */
+  .cal-dow-cell-set { padding:6px 4px; font-size:10px; line-height:1.3; word-break:break-word; }
+  .cal-dow-place { font-size:10px; font-weight:700; color:var(--theme-dark); }
+  .cal-dow-time { font-size:9px; color:var(--color-text-secondary); }
+  .cal-dow-duty-label { font-size:9px; color:#c97a2b; font-weight:700; margin-top:2px; }
+  .cal-dow-edit-btn { background:transparent; border:none; color:var(--theme-dark); font-size:12px; cursor:pointer; padding:2px 4px; }
+  /* カレンダー内当番表示 */
+  .cal-day-duty { font-size:9px; font-weight:700; color:#c97a2b; line-height:1.2; margin-bottom:1px; word-break:break-all; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  /* 曜日設定モーダル */
+  .dow-set-row { display:grid; grid-template-columns:50px 1fr; gap:8px; align-items:center; margin-bottom:8px; }
+  .dow-set-label { font-size:15px; font-weight:700; color:var(--color-text-primary); }
+  /* 日程モーダル内の当番選択 */
+  .duty-section { background:#e8f5eb; border:1px dashed var(--theme-main); border-radius:8px; padding:10px; margin-top:8px; }
+  .duty-section-title { font-size:14px; font-weight:700; color:var(--theme-dark); margin-bottom:6px; }
+  .duty-row { margin-bottom:6px; }
+  .duty-row:last-child { margin-bottom:0; }
+  .overlay { display:none; background:rgba(0,0,0,0.7); z-index:200; align-items:center; justify-content:center; padding:20px; }
+  .overlay.open { display:flex; }
+  /* 管理者PWポップアップ（画面中央フロート表示） */
+  .admin-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:9999; align-items:center; justify-content:center; padding:16px; }
+  .admin-overlay.open { display:flex; }
+  .admin-pw-box { background:#222; border:1px solid var(--theme-main); border-radius:16px; padding:28px; text-align:center; width:280px; max-width:100%; }
+  .admin-pw-title { color:var(--theme-main); font-size:17px; font-weight:700; margin-bottom:16px; }
+  .admin-pin-disp { font-size:28px; letter-spacing:14px; color:#fff; margin:8px 0 4px; min-height:36px; }
+  .admin-pin-err { color:#e24b4a; font-size:14px; min-height:18px; margin-bottom:6px; }
+  /* モーダル：画面中央フロート表示（オーバーレイ方式） */
+  .modal-bg { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:9999; align-items:center; justify-content:center; padding:16px; overflow-y:auto; }
+  .modal-bg.open { display:flex; }
+  .modal-bg > .modal { margin:auto; max-width:420px; width:100%; position:relative; z-index:10000; background:#ffffff; box-shadow:0 8px 32px rgba(0,0,0,0.3); max-height:90vh; overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  /* 汎用ポップアップ（画面中央フロート表示）— PW変更等で使用 */
+  .pop-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.7); z-index:9999; align-items:center; justify-content:center; padding:16px; overflow-y:auto; }
+  .pop-overlay.open { display:flex; }
+  .pop-overlay .modal { margin:auto; max-width:420px; width:100%; position:relative; z-index:10000; background:#ffffff; box-shadow:0 8px 32px rgba(0,0,0,0.3); }
+  .modal { background:var(--color-background-primary); border-radius:14px; padding:20px; border:1px solid var(--theme-main); margin:12px; box-sizing:border-box; }
+  .modal h3 { font-size:18px; font-weight:700; margin-bottom:4px; color:var(--color-text-primary); }
+  .modal label { font-size:14px; color:var(--color-text-secondary); display:block; margin-bottom:4px; margin-top:10px; }
+  .modal input, .modal select, .modal textarea { width:100%; padding:9px 12px; border:0.5px solid var(--color-border-secondary); border-radius:8px; background:var(--color-background-secondary); color:var(--color-text-primary); font-size:15px; font-family:inherit; box-sizing:border-box; }
+  .modal textarea { resize:vertical; min-height:70px; }
+  .modal-btns { display:flex; gap:8px; margin-top:16px; }
+  .modal-btns button { flex:1; padding:11px 10px; border-radius:10px; border:none; font-size:15px; font-weight:700; cursor:pointer; font-family:inherit; display:flex; align-items:center; justify-content:center; gap:5px; }
+  .btn-cancel { background:#444; color:#fff; border:1px solid #666; }
+  .btn-cancel:active { background:#555; }
+  .btn-submit { background:var(--theme-main); color:var(--theme-text-on); }
+  .btn-delete { background:#c00; color:#fff; border:1px solid #a00; }
+  .btn-delete:active { background:#a00; }
+
+  /* 選手詳細モーダル（画面中央フロート表示） */
+  .detail-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.85); z-index:9999; align-items:center; justify-content:center; padding:16px; }
+  .detail-overlay.open { display:flex; }
+  /* モーダル本体：高さ上限を画面の90%にし、内部を flex 縦並びに */
+  .detail-overlay .modal { margin:auto; max-width:420px; width:100%; max-height:90vh; background:#ffffff; position:relative; z-index:10000; display:flex; flex-direction:column; overflow:hidden; padding:0; }
+  /* 詳細コンテンツ部分だけがスクロール、ボタン領域は常に下に残る */
+  .detail-overlay #detailContent { flex:1 1 auto; overflow-y:auto; -webkit-overflow-scrolling:touch; min-height:0; }
+  .detail-overlay .modal-btns { flex:0 0 auto; padding:14px 16px; margin-top:0; background:#ffffff; border-top:1px solid #e5e5e5; }
+
+  /* ===== スマートフォン対応 ===== */
+  html, body { -webkit-text-size-adjust:100%; background:#f5f5f5; color:#111; }
+
+  /* パスワード画面：枠を画面全体にフィット */
+  .pw-screen { min-height:100vh; min-height:100dvh; padding:16px; border-radius:0; }
+
+  /* スマホ幅（〜480px）の調整 */
+  @media (max-width:480px) {
+    /* 統計カード：5枚を2行に折り返し */
+    .stats-row { flex-wrap:wrap; gap:6px; padding:10px; }
+    .stat-card { flex:1 1 calc(33.33% - 4px); min-width:0; padding:8px 4px; }
+    .stat-card:nth-child(1), .stat-card:nth-child(2) { flex:1 1 calc(50% - 3px); }
+    .stat-num { font-size:21px; }
+    .stat-label { font-size:10px; }
+
+    /* 選手カード：2列確実に入るサイズ */
+    .grid { grid-template-columns:repeat(2, 1fr); gap:10px; padding:10px; }
+    .card { padding:8px; }
+    .card-badges { gap:3px; }
+    .grade-badge, .num-badge, .pos-badge { font-size:10px; padding:2px 6px; }
+    .player-name { font-size:14px; }
+    .player-roman { font-size:10px; }
+    .player-info { font-size:12px; }
+
+    /* ヘッダー：チーム名を少し詰める */
+    .header { padding:12px; }
+    .team-name { font-size:18px; letter-spacing:0.5px; }
+    .team-sub { font-size:10px; letter-spacing:1px; }
+    .header-left { gap:8px; }
+    .admin-btn-header { padding:6px 8px; font-size:12px; border-radius:6px; }
+
+    /* タブ：パディング縮小・アイコン込みで見やすく */
+    .tabs { padding:5px 5px 0; gap:3px; }
+    .tab { padding:10px 4px; font-size:14px; border-radius:8px 8px 0 0; }
+
+    /* ツールバー：折り返し許容済みなのでgap調整のみ */
+    .toolbar { gap:6px; padding:8px 10px; }
+    .tb-gold, .tb-red { padding:6px 12px; font-size:13px; }
+
+    /* カレンダー：日付セル小さめ */
+    .cal-wrap { padding:10px; }
+    .cal-day { min-height:44px; padding:2px; }
+    .cal-day-num { font-size:13px; width:18px; height:18px; }
+    .cal-event { font-size:9px; padding:1px 3px; }
+    .cal-dow-cell { padding:6px 2px; font-size:12px; }
+    .cal-title { font-size:16px; }
+
+    /* モーダル：左右マージン縮小 */
+    .modal { padding:16px; margin:8px; }
+    .modal h3 { font-size:17px; }
+
+    /* 管理者PWボックス */
+    .admin-pw-box { width:100%; max-width:280px; padding:20px; }
+
+    /* 日程リスト */
+    .schedule-item { padding:10px 12px; gap:10px; }
+    .schedule-day { font-size:23px; }
+  }
+
+  /* 極小画面（〜360px、古いiPhone SE等） */
+  @media (max-width:360px) {
+    .stat-num { font-size:18px; }
+    .grid { gap:8px; padding:8px; }
+    .pin-disp { font-size:28px; letter-spacing:12px; }
+  }
+</style>
+
+<div class="pw-screen" id="pwScreen">
+  <div class="pw-box">
+    <div style="width:64px;height:64px;border-radius:10px;background:var(--theme-main);display:flex;align-items:center;justify-content:center;margin:0 auto 12px;overflow:hidden;padding:4px;box-sizing:border-box;"><img src="icon-180.png" alt="アンテロープス" style="width:100%;height:100%;object-fit:contain;display:block;"></div>
+    <div class="pw-title">ANTELOPES</div>
+    <div class="pw-sub">パスワードを入力してください</div>
+    <div class="pin-disp" id="pinDisp">- - - -</div>
+    <div class="pin-err" id="pinErr"></div>
+    <div class="np">
+      <button class="np-btn" onclick="inp('1',0)">1</button><button class="np-btn" onclick="inp('2',0)">2</button><button class="np-btn" onclick="inp('3',0)">3</button>
+      <button class="np-btn" onclick="inp('4',0)">4</button><button class="np-btn" onclick="inp('5',0)">5</button><button class="np-btn" onclick="inp('6',0)">6</button>
+      <button class="np-btn" onclick="inp('7',0)">7</button><button class="np-btn" onclick="inp('8',0)">8</button><button class="np-btn" onclick="inp('9',0)">9</button>
+      <button class="np-btn" onclick="clr(0)">C</button><button class="np-btn" onclick="inp('0',0)">0</button><button class="np-btn" onclick="bsp(0)">⌫</button>
+    </div>
+  </div>
+</div>
+
+<div class="app" id="app">
+  <div class="header">
+    <div class="header-inner">
+      <div class="header-left">
+        <div class="team-logo"><img src="icon-180.png" alt="アンテロープス"></div>
+        <div>
+          <div class="team-name">ANTELOPES</div>
+          <div class="team-sub">BASKETBALL CLUB · KAMIICHI</div>
+        </div>
+      </div>
+      <div class="header-right">
+        <button class="admin-btn-header" id="pwChangeBtn" onclick="openPwChange()" style="display:none;">🔑 PW変更</button>
+        <button class="admin-btn-header" id="adminBtn" onclick="toggleAdmin()">🔒 管理者ログイン</button>
+      </div>
+    </div>
+  </div>
+  <div class="header-stripe"></div>
+  <!-- インフォバナー（トップ表示） -->
+  <div id="topInfoBanner" style="display:none;"></div>
+  <div class="admin-bar">
+    <span class="admin-status" id="adminStatus">閲覧モード</span>
+  </div>
+
+  <!-- 管理者PWポップアップ（画面中央に表示） -->
+  <div id="adminOverlay" class="admin-overlay">
+    <div class="admin-pw-box">
+      <div class="admin-pw-title">🔒 管理者パスワード</div>
+      <div class="admin-pin-disp" id="adminPinDisp">- - - -</div>
+      <div class="admin-pin-err" id="adminPinErr"></div>
+      <div class="np" style="margin-top:12px;">
+        <button class="np-btn" onclick="inp('1',1)">1</button><button class="np-btn" onclick="inp('2',1)">2</button><button class="np-btn" onclick="inp('3',1)">3</button>
+        <button class="np-btn" onclick="inp('4',1)">4</button><button class="np-btn" onclick="inp('5',1)">5</button><button class="np-btn" onclick="inp('6',1)">6</button>
+        <button class="np-btn" onclick="inp('7',1)">7</button><button class="np-btn" onclick="inp('8',1)">8</button><button class="np-btn" onclick="inp('9',1)">9</button>
+        <button class="np-btn" onclick="clr(1)">C</button><button class="np-btn" onclick="inp('0',1)">0</button><button class="np-btn" onclick="bsp(1)">⌫</button>
+      </div>
+      <button onclick="closeAdminOverlay()" style="margin-top:12px;width:100%;padding:10px;border-radius:10px;border:1px solid #555;background:#333;color:#fff;font-size:15px;cursor:pointer;font-family:inherit;">キャンセル</button>
+    </div>
+  </div>
+  <div class="tabs">
+    <div class="tab active" id="tab-schedule" onclick="switchTab('schedule')">📅 日程</div>
+    <div class="tab" id="tab-info" onclick="switchTab('info')">📢 INFO</div>
+    <div class="tab" id="tab-player" onclick="switchTab('player')">🏀 選手管理</div>
+  </div>
+
+  <!-- 選手タブ -->
+  <div id="view-player" style="display:none;">
+    <!-- 選手統計パネル -->
+    <div class="player-stats">
+      <div class="ps-main">
+        <div class="ps-main-item">
+          <div class="ps-main-label">👥 選手数</div>
+          <div class="ps-main-value"><span id="statTotal">0</span><span class="ps-unit">名</span></div>
+        </div>
+        <div class="ps-main-divider"></div>
+        <div class="ps-main-item">
+          <div class="ps-main-label">📏 平均身長</div>
+          <div class="ps-main-value"><span id="statAvgH">-</span><span class="ps-unit" id="statAvgHUnit"></span></div>
+        </div>
+      </div>
+      <div class="ps-grades">
+        <div class="ps-grade-item"><span class="ps-grade-num" id="stat3">0</span><span class="ps-grade-label">3年</span></div>
+        <div class="ps-grade-item"><span class="ps-grade-num" id="stat2">0</span><span class="ps-grade-label">2年</span></div>
+        <div class="ps-grade-item"><span class="ps-grade-num" id="stat1">0</span><span class="ps-grade-label">1年</span></div>
+      </div>
+    </div>
+    <div class="toolbar" id="playerToolbar">
+      <button class="tb-gold" id="addBtn" onclick="openAddInDetail()" style="display:none;">＋ 選手追加</button>
+      <button class="tb-red" id="promotionBtn" onclick="showPromotion()" style="display:none;">🎓 新年度一括進級</button>
+      <button class="tb-gold" id="playerExcelBtn" onclick="exportPlayerExcel()" style="display:none;font-size:13px;">📊 選手Excel出力</button>
+    </div>
+    <!-- 旧選手追加/編集フォーム（addModal）は詳細モーダル方式に統合されたため削除 -->
+
+    <!-- 選手詳細モーダル（画面中央フロート表示） -->
+    <div class="detail-overlay" id="detailModal">
+      <div class="modal">
+        <div id="detailContent"></div>
+        <div class="modal-btns" id="detailBtnsView">
+          <button class="btn-cancel" onclick="closeDetail()">✕ 閉じる</button>
+          <button class="btn-submit" id="detailEditBtn" onclick="switchToEditMode()" style="display:none;">✏️ 編集</button>
+          <button class="btn-delete" id="detailDeleteBtn" onclick="deletePlayer()" style="display:none;">🗑️ 削除</button>
+        </div>
+        <div class="modal-btns" id="detailBtnsEdit" style="display:none;">
+          <button class="btn-cancel" onclick="switchToViewMode()">✕ キャンセル</button>
+          <button class="btn-submit" onclick="savePlayer()">💾 保存する</button>
+        </div>
+      </div>
+    </div>
+    <!-- 確認バナー -->
+    <div class="confirm-banner" id="confirmBanner" style="display:none;">
+      <p id="confirmMsg"></p>
+      <div class="confirm-btns">
+        <button class="confirm-cancel" onclick="hidePromotion()">キャンセル</button>
+        <button class="confirm-exec" onclick="executePromotion()">進級する</button>
+      </div>
+    </div>
+    <!-- ボール番号検索カード -->
+    <div class="ball-search-card">
+      <div class="ball-search-label">🏀 チームボール番号検索</div>
+      <div class="search-box">
+        <input type="number" id="searchBall" placeholder="番号を入力してEnter" min="0"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();executeBallSearch();}">
+        <button class="search-go" onclick="executeBallSearch()" title="検索">🔍</button>
+        <button class="search-clear" id="searchClearBtn" onclick="clearBallSearch()" style="display:none;" title="クリア">✕</button>
+      </div>
+    </div>
+    <!-- ビブス番号検索カード -->
+    <div class="ball-search-card">
+      <div class="ball-search-label">🦺 ビブス番号検索</div>
+      <div class="search-box">
+        <input type="text" id="searchBibs" placeholder="番号を入力してEnter（00もOK）" inputmode="numeric" pattern="[0-9]*"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();executeBibsSearch();}">
+        <button class="search-go" onclick="executeBibsSearch()" title="検索">🔍</button>
+        <button class="search-clear" id="searchBibsClearBtn" onclick="clearBibsSearch()" style="display:none;" title="クリア">✕</button>
+      </div>
+    </div>
+    <div class="grade-bar">
+      <div class="grade-btns">
+        <button class="grade-btn active" onclick="filterGrade('all')" id="gb-all">全員</button>
+        <button class="grade-btn" onclick="filterGrade(3)" id="gb-3">3年生</button>
+        <button class="grade-btn" onclick="filterGrade(2)" id="gb-2">2年生</button>
+        <button class="grade-btn" onclick="filterGrade(1)" id="gb-1">1年生</button>
+      </div>
+      <select id="sortBy" onchange="renderPlayers()" class="sort-select">
+        <option value="grade">学年順</option>
+        <option value="number">背番号順</option>
+        <option value="ball">ボール番号順</option>
+        <option value="bibs">ビブス番号順</option>
+      </select>
+    </div>
+    <div id="searchHitBanner" class="search-hit-banner" style="display:none;"></div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <!-- 日程タブ -->
+  <div id="view-schedule">
+    <!-- 日程入力フォーム（オーバーレイ・ポップアップ） -->
+    <div class="modal-bg" id="scheduleModal" onclick="if(event.target===this)closeScheduleModal();">
+      <div class="modal" onclick="event.stopPropagation();">
+        <h3 id="scheduleModalTitle">予定を追加</h3>
+        <label>日付</label><input type="date" id="sDate">
+        <label>種別</label>
+        <select id="sType">
+          <option value="practice">練習</option><option value="game">練習試合</option>
+          <option value="tournament">大会</option><option value="other">その他</option>
+        </select>
+        <label>タイトル</label><input type="text" id="sTitle" placeholder="例：〇〇中学との練習試合">
+        <label>開始時間</label><input type="time" id="sStart">
+        <label>終了時間</label><input type="time" id="sEnd">
+        <label>場所</label><input type="text" id="sPlace" placeholder="例：上市町体育館">
+        <label>目的地（地図検索用）</label>
+        <input type="text" id="sDestination" placeholder="住所 or 施設名（例：上市町体育館 / 富山県中新川郡上市町〇〇）">
+        <div style="font-size:12px;color:var(--color-text-secondary);margin-top:-4px;margin-bottom:8px;">※ 入力するとカレンダーで📍リンクからGoogleマップが開きます</div>
+        <!-- 当番欄（曜日設定がある場合のみ表示） -->
+        <div id="sDutySection" class="duty-section" style="display:none;">
+          <div class="duty-section-title" id="sDutySectionTitle">当番</div>
+          <div id="sDutyRows"></div>
+        </div>
+        <label>メモ</label><textarea id="sMemo" placeholder="集合時間・持ち物など"></textarea>
+        <div class="modal-btns">
+          <button class="btn-cancel" onclick="closeScheduleModal()">キャンセル</button>
+          <button class="btn-delete" id="sDeleteBtn" onclick="deleteSchedule()" style="display:none;background:#fff0f0;color:#c00;">削除</button>
+          <button class="btn-submit" onclick="saveSchedule()">保存</button>
+        </div>
+      </div>
+    </div>
+    <!-- PW変更フォームはapp直下に移動済み -->
+    <!-- Excel出力フォーム（管理者のみ） -->
+    <div class="modal-bg" id="excelModal" onclick="if(event.target===this)closeExcelModal();">
+      <div class="modal" onclick="event.stopPropagation();">
+        <h3>📊 日程をExcel出力</h3>
+        <label>開始日</label><input type="date" id="excelFrom">
+        <label>終了日</label><input type="date" id="excelTo">
+        <div style="font-size:13px;color:var(--color-text-secondary);margin-top:8px;">※ 空欄の場合は全期間を出力します</div>
+        <div class="modal-btns">
+          <button class="btn-cancel" onclick="closeExcelModal()">キャンセル</button>
+          <button class="btn-submit" onclick="exportExcel()">出力する</button>
+        </div>
+      </div>
+    </div>
+    <div class="cal-wrap">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+        <button class="tb-gold" id="excelBtn" onclick="openExcelModal()" style="display:none;font-size:13px;">📊 Excel出力</button>
+      </div>
+      <!-- 月次固定メッセージエリア（チーム荷物当番など、その月の固定情報） -->
+      <div class="monthly-msg-card" id="monthlyMsgCard">
+        <div class="monthly-msg-header">
+          <div class="monthly-msg-title">📌 <span id="monthlyMsgMonth"></span>のお知らせ</div>
+          <button class="monthly-msg-edit-btn" id="monthlyMsgEditBtn" onclick="openMonthlyMsgModal()" style="display:none;">編集</button>
+        </div>
+        <div class="monthly-msg-body" id="monthlyMsgBody">（未設定）</div>
+      </div>
+      <!-- 月次メッセージ編集モーダル -->
+      <div class="modal-bg" id="monthlyMsgModal" onclick="if(event.target===this)closeMonthlyMsgModal();">
+        <div class="modal" onclick="event.stopPropagation();">
+          <h3>📌 <span id="monthlyMsgModalMonth"></span>のお知らせを編集</h3>
+          <label>内容</label>
+          <textarea id="mMsgBody" placeholder="例：&#10;【荷物当番】&#10;救急箱：土井&#10;ロケランⅠ黄：西田&#10;ロケランⅡ黒：山本" style="min-height:140px;"></textarea>
+          <div style="font-size:13px;color:var(--color-text-secondary);margin-top:6px;">※ 改行はそのまま反映されます。空欄で保存すると未設定状態に戻ります。</div>
+          <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeMonthlyMsgModal()">キャンセル</button>
+            <button class="btn-submit" onclick="saveMonthlyMsg()">保存</button>
+          </div>
+        </div>
+      </div>
+      <!-- 曜日ヘッダー設定モーダル -->
+      <div class="modal-bg" id="dowSetModal" onclick="if(event.target===this)closeDowSetModal();">
+        <div class="modal" onclick="event.stopPropagation();">
+          <h3>📅 <span id="dowSetTitle"></span>の固定設定</h3>
+          <label>会場</label>
+          <input type="text" id="dPlace" placeholder="例：上市中央小">
+          <label>開始時間</label>
+          <input type="time" id="dStart">
+          <label>終了時間</label>
+          <input type="time" id="dEnd">
+          <label>当番</label>
+          <select id="dDuty">
+            <option value="none">なし</option>
+            <option value="key">🔑 鍵当番（1名）</option>
+            <option value="goal">🥅 ゴール当番（3名）</option>
+          </select>
+          <div style="font-size:13px;color:var(--color-text-secondary);margin-top:6px;">※ 設定するとカレンダーの曜日ヘッダーに会場・時間・当番ラベルが表示され、その曜日の日程入力時に当番欄が出ます。</div>
+          <div class="modal-btns">
+            <button class="btn-cancel" onclick="closeDowSetModal()">キャンセル</button>
+            <button class="btn-delete" onclick="clearDowSet()" style="background:#fff0f0;color:#c00;">クリア</button>
+            <button class="btn-submit" onclick="saveDowSet()">保存</button>
+          </div>
+        </div>
+      </div>
+      <div class="cal-header">
+        <button class="cal-nav" onclick="changeMonth(-1)">＜</button>
+        <div class="cal-title" id="calTitle"></div>
+        <button class="cal-nav" onclick="changeMonth(1)">＞</button>
+      </div>
+      <div class="cal-grid">
+        <div class="cal-dow" id="calDowRow"></div>
+        <div class="cal-days" id="calDays"></div>
+      </div>
+      <div class="schedule-list" id="scheduleList"></div>
+    </div>
+  </div>
+
+  <!-- インフォタブ -->
+  <div id="view-info" style="display:none;">
+    <div class="toolbar">
+      <button class="tb-gold" id="addInfoBtn" onclick="openInfoModal(null)" style="display:none;">＋ インフォ投稿</button>
+    </div>
+    <!-- インフォ入力フォーム（オーバーレイ・ポップアップ） -->
+    <div id="infoModal" class="modal-bg" onclick="if(event.target===this)closeInfoModal();">
+      <div class="modal" onclick="event.stopPropagation();">
+        <h3 id="infoModalTitle">インフォを投稿</h3>
+        <label>投稿者</label>
+        <select id="iFrom">
+          <option value="監督">監督</option>
+          <option value="コーチ">コーチ</option>
+          <option value="保護者会">保護者会</option>
+        </select>
+        <label>タイトル</label>
+        <input type="text" id="iTitle" placeholder="例：明日の練習について">
+        <label>内容</label>
+        <textarea id="iBody" placeholder="連絡内容を入力してください" style="min-height:120px;"></textarea>
+        <div class="modal-btns">
+          <button class="btn-cancel" onclick="closeInfoModal()">キャンセル</button>
+          <button class="btn-delete" id="iDeleteBtn" onclick="deleteInfo()" style="display:none;">削除</button>
+          <button class="btn-submit" onclick="saveInfo()">投稿する</button>
+        </div>
+      </div>
+    </div>
+    <div style="padding:14px;background:var(--color-background-tertiary);" id="infoList">
+      <div style="text-align:center;padding:40px 0;color:var(--color-text-secondary);font-size:18px;">インフォメーションはありません</div>
+    </div>
+  </div>
+
+  <!-- PW変更フォーム（ポップアップ表示） -->
+  <div class="pop-overlay" id="pwChangeModal">
+    <div class="modal">
+      <h3>🔑 パスワード変更</h3>
+      <label>閲覧パス（現在：<span id="curViewPw">****</span>）</label>
+      <input type="number" id="newViewPw" placeholder="4桁の数字" maxlength="4">
+      <label>管理者パス（現在：<span id="curAdminPw">****</span>）</label>
+      <input type="number" id="newAdminPw" placeholder="4桁の数字" maxlength="4">
+      <div style="font-size:13px;color:var(--color-text-secondary);margin-top:8px;">※ 空欄のものは変更しません</div>
+      <div class="modal-btns">
+        <button class="btn-cancel" onclick="closePwChange()">キャンセル</button>
+        <button class="btn-submit" onclick="savePwChange()">変更する</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 統一確認モーダル（送信・削除前の最終確認用） -->
+  <div class="modal-bg" id="confirmModal" onclick="if(event.target===this)closeConfirmModal();" style="z-index:10001;">
+    <div class="modal" onclick="event.stopPropagation();" style="max-width:380px;">
+      <h3 id="confirmTitle">確認</h3>
+      <div id="confirmBody" style="font-size:15px;color:var(--color-text-primary);line-height:1.6;white-space:pre-wrap;margin-bottom:6px;"></div>
+      <div class="modal-btns">
+        <button class="btn-cancel" onclick="closeConfirmModal()" id="confirmCancelBtn">キャンセル</button>
+        <button class="btn-submit" onclick="execConfirmModal()" id="confirmOkBtn">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 閲覧者用：日程詳細ポップアップ（その日の予定を一覧表示） -->
+  <div class="modal-bg" id="dayDetailModal" onclick="if(event.target===this)closeDayDetailModal();">
+    <div class="modal" onclick="event.stopPropagation();" style="max-width:420px;">
+      <h3 id="dayDetailTitle">予定詳細</h3>
+      <div id="dayDetailBody" style="max-height:60vh;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>
+      <div class="modal-btns">
+        <button class="btn-cancel" onclick="closeDayDetailModal()" style="flex:1;">✕ 閉じる</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- Firebase SDK (Compat版) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+// ========== Firebase 初期化 ==========
+const firebaseConfig = {
+  apiKey: "AIzaSyCPpFsN2deoRQ3JckTbJ4yg3SptIVJtf-E",
+  authDomain: "antelopes-hs-dashboard.firebaseapp.com",
+  projectId: "antelopes-hs-dashboard",
+  storageBucket: "antelopes-hs-dashboard.firebasestorage.app",
+  messagingSenderId: "929985303695",
+  appId: "1:929985303695:web:f51d460d45f290d4eb4cfa"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// ========== 定数 ==========
+const PASSWORDS={ view:'1234', admin:'9999' };
+const ADMIN_KEY='antelope2026';
+const WEEKDAYS=['日','月','火','水','木','金','土'];
+const TYPE_LABEL={practice:'練習',game:'練習試合',tournament:'大会',other:'その他'};
+const TYPE_CLASS={practice:'ev-practice',game:'ev-game',tournament:'ev-tournament',other:'ev-other'};
+let pin='', adminPin='', isAdmin=false, currentFilter='all';
+let editingScheduleId=null;
+let editingInfoId=null;
+const now=new Date();
+let calYear=now.getFullYear(), calMonth=now.getMonth();
+
+// ========== データ（Firestoreから読み込む） ==========
+let players=[];
+let schedules=[];
+let infos=[];
+// 月次固定メッセージ（key: "YYYY-MM" → {body: string}）
+let monthlyMessages={};
+// 曜日ヘッダー設定（key: 0(日)〜6(土) → {place, start, end, duty}）
+// duty: 'none' | 'key' | 'goal'  / 'key'=鍵当番1名, 'goal'=ゴール当番3名
+let dowSettings={};
+
+// ========== 統一確認モーダル ==========
+// 送信・削除前に確認ポップアップを出す汎用関数。
+// showConfirmModal({title, body, okLabel, okClass, onOk}) → onOkがOK押下時に実行される。
+let _confirmCallback=null;
+function showConfirmModal(opts){
+  const {title='確認', body='', okLabel='OK', okClass='btn-submit', onOk=()=>{}} = opts||{};
+  document.getElementById('confirmTitle').textContent=title;
+  document.getElementById('confirmBody').textContent=body;
+  const okBtn=document.getElementById('confirmOkBtn');
+  okBtn.textContent=okLabel;
+  // クラスを差し替え（btn-submit / btn-delete スタイル切替用）
+  okBtn.className=okClass;
+  _confirmCallback=onOk;
+  document.getElementById('confirmModal').classList.add('open');
+}
+function closeConfirmModal(){
+  document.getElementById('confirmModal').classList.remove('open');
+  _confirmCallback=null;
+}
+function execConfirmModal(){
+  const cb=_confirmCallback;
+  closeConfirmModal();
+  if(typeof cb==='function') cb();
+}
+
+// Firestoreリアルタイム監視を開始
+function startFirestoreSync(){
+  db.collection('players').onSnapshot(snapshot=>{
+    players=snapshot.docs.map(d=>({id:d.id, ...d.data()}));
+    renderPlayers();
+  }, err=>console.error('players sync error:', err));
+
+  db.collection('schedules').onSnapshot(snapshot=>{
+    schedules=snapshot.docs.map(d=>({id:d.id, ...d.data()}));
+    renderCalendar();
+  }, err=>console.error('schedules sync error:', err));
+
+  db.collection('infos').onSnapshot(snapshot=>{
+    infos=snapshot.docs.map(d=>({id:d.id, ...d.data()}))
+      .sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+    renderInfos();
+    renderTopInfoBanner();
+  }, err=>console.error('infos sync error:', err));
+
+  // 月次メッセージ（ドキュメントID = "YYYY-MM"）
+  db.collection('monthlyMessages').onSnapshot(snapshot=>{
+    monthlyMessages={};
+    snapshot.docs.forEach(d=>{ monthlyMessages[d.id]=d.data(); });
+    renderCalendar();
+  }, err=>console.error('monthlyMessages sync error:', err));
+
+  // 曜日ヘッダー設定（settings/dow ドキュメント単一）
+  db.collection('settings').doc('dow').onSnapshot(doc=>{
+    if(doc.exists){
+      dowSettings=doc.data()||{};
+    } else {
+      dowSettings={};
+    }
+    renderCalendar();
+  }, err=>console.error('dowSettings sync error:', err));
+
+  // パスワード設定（単一ドキュメント）
+  db.collection('settings').doc('passwords').onSnapshot(doc=>{
+    if(doc.exists){
+      const d=doc.data();
+      if(d.view) PASSWORDS.view=d.view;
+      if(d.admin) PASSWORDS.admin=d.admin;
+    }
+  }, err=>console.error('passwords sync error:', err));
+}
+
+function inp(n,mode){
+  if(mode===0){ if(pin.length>=4)return; pin+=n; updatePin(); if(pin.length===4)checkPin(); }
+  else { if(adminPin.length>=4)return; adminPin+=n; updateAdminPin(); if(adminPin.length===4)checkAdminPin(); }
+}
+function clr(m){ if(m===0){pin='';updatePin();}else{adminPin='';updateAdminPin();} }
+function bsp(m){ if(m===0){pin=pin.slice(0,-1);updatePin();}else{adminPin=adminPin.slice(0,-1);updateAdminPin();} }
+function updatePin(){ document.getElementById('pinDisp').textContent=(pin+'----').slice(0,4).split('').join(' '); }
+function updateAdminPin(){ document.getElementById('adminPinDisp').textContent=(adminPin+'----').slice(0,4).split('').join(' '); }
+function checkPin(){
+  if(pin===PASSWORDS.view||pin===PASSWORDS.admin){
+    isAdmin=pin===PASSWORDS.admin;
+    document.getElementById('pwScreen').style.display='none';
+    document.getElementById('app').style.display='block';
+    updateAdminUI(); renderPlayers(); renderCalendar(); renderInfos();
+  } else {
+    document.getElementById('pinErr').textContent='パスワードが違います';
+    setTimeout(()=>{ pin=''; updatePin(); document.getElementById('pinErr').textContent=''; },1000);
+  }
+}
+function checkAdminPin(){
+  if(adminPin===PASSWORDS.admin){ isAdmin=true; closeAdminOverlay(); updateAdminUI(); renderInfos(); }
+  else {
+    document.getElementById('adminPinErr').textContent='パスワードが違います';
+    setTimeout(()=>{ adminPin=''; updateAdminPin(); document.getElementById('adminPinErr').textContent=''; },1000);
+  }
+}
+function toggleAdmin(){
+  if(isAdmin){ isAdmin=false; updateAdminUI(); hidePromotion(); return; }
+  adminPin=''; updateAdminPin();
+  document.getElementById('adminPinErr').textContent='';
+  const overlay=document.getElementById('adminOverlay');
+  overlay.classList.add('open');
+  document.body.style.overflow='hidden';
+  // 背景タップで閉じる
+  overlay.onclick=(e)=>{ if(e.target===overlay) closeAdminOverlay(); };
+}
+function closeAdminOverlay(){
+  document.getElementById('adminOverlay').classList.remove('open');
+  document.body.style.overflow='';
+  adminPin='';
+  updateAdminPin();
+}
+function updateAdminUI(){
+  document.getElementById('adminStatus').textContent=isAdmin?'✅ 管理者モード':'閲覧モード';
+  const btn=document.getElementById('adminBtn');
+  btn.textContent=isAdmin?'🚪 ログアウト':'🔒 管理者ログイン';
+  btn.className=isAdmin?'admin-btn-header logout':'admin-btn-header';
+  document.getElementById('addBtn').style.display=isAdmin?'block':'none';
+  document.getElementById('promotionBtn').style.display=isAdmin?'block':'none';
+  document.getElementById('pwChangeBtn').style.display=isAdmin?'block':'none';
+  document.getElementById('excelBtn').style.display=isAdmin?'block':'none';
+  document.getElementById('playerExcelBtn').style.display=isAdmin?'block':'none';
+  renderCalendar();
+}
+function switchTab(tab){
+  ['player','schedule','info'].forEach(t=>{
+    document.getElementById('view-'+t).style.display=t===tab?'block':'none';
+    document.getElementById('tab-'+t).className=t===tab?'tab active':'tab';
+  });
+  if(tab==='schedule') renderCalendar();
+  if(tab==='info') renderInfos();
+}
+
+// 一括進級
+function showPromotion(){
+  const grade6=players.filter(p=>p.grade===3).length;
+  let msg=`全選手の学年を+1年します。`;
+  if(grade6>0) msg+=`\n中学3年生${grade6}名のデータと写真は削除されます。`;
+  document.getElementById('confirmMsg').textContent=msg;
+  document.getElementById('confirmBanner').style.display='block';
+}
+function hidePromotion(){
+  document.getElementById('confirmBanner').style.display='none';
+}
+async function executePromotion(){
+  const grade6=players.filter(p=>p.grade===3).length;
+  let bodyMsg=`全選手の学年を+1年します。`;
+  if(grade6>0) bodyMsg+=`\n中学3年生${grade6}名のデータと写真は削除されます。\n\nこの操作は取り消せません。よろしいですか？`;
+  else bodyMsg+=`\n\nこの操作は取り消せません。よろしいですか？`;
+  showConfirmModal({
+    title:'一括進級を実行',
+    body: bodyMsg,
+    okLabel:'🎓 進級する',
+    okClass:'btn-delete',
+    onOk: async ()=>{
+      try{
+        const batch=db.batch();
+        // 3年生を削除
+        players.filter(p=>p.grade===3).forEach(p=>{
+          batch.delete(db.collection('players').doc(p.id));
+        });
+        // 残りを+1学年
+        players.filter(p=>p.grade!==3).forEach(p=>{
+          batch.update(db.collection('players').doc(p.id), {grade: p.grade+1, adminKey:ADMIN_KEY});
+        });
+        await batch.commit();
+        hidePromotion();
+      } catch(e){
+        alert('一括進級に失敗しました: '+e.message);
+        console.error(e);
+      }
+    }
+  });
+}
+
+function filterGrade(g){
+  currentFilter=g;
+  document.querySelectorAll('.grade-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById(g==='all'?'gb-all':'gb-'+g).classList.add('active');
+  renderPlayers();
+}
+// 編集中の選手ID（nullなら新規追加）
+let editingPlayerId=null;
+// 旧addModal互換のno-op（詳細モーダル方式に統合したため実体は不要）
+// 既存のコードから呼ばれても安全にスルーする
+function openAdd(){ openAddInDetail(); }
+function closeAdd(){ /* 旧addModalは削除済み。新方式ではcloseDetailを使用 */ }
+// ボール種別に応じてチーム貸出番号入力欄の表示切替
+function toggleBallNumber(){
+  const t=document.getElementById('fBallType').value;
+  document.getElementById('ballNumberBox').style.display=(t==='team')?'block':'none';
+}
+
+// 選手詳細モーダル
+let currentDetailId=null;
+function gradeLabel(g){ return g+'年生'; }
+function bibsOwnLabel(v){ return v==='personal'?'個人購入':'チーム貸出'; }
+// HTMLエスケープ（XSS対策＋ユーザー入力の特殊文字を安全に表示）
+function escapeHtml(str){
+  if(str===null||str===undefined) return '';
+  return String(str)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+// URLを自動でハイパーリンクに変換（XSS対策のため必ずescapeHtmlしてから使う）
+// 使い方: linkify(escapeHtml(text)) ではなく linkify(text) でOK（内部でエスケープ済み）
+function linkify(str){
+  if(str===null||str===undefined) return '';
+  // まずHTMLエスケープしてから、URLパターンをaタグに置換
+  const escaped=escapeHtml(str);
+  // http(s):// で始まるURL、または www. で始まるドメインを検出
+  // 末尾の句読点（。、,.;:!?）はリンクに含めない
+  const urlPattern=/(https?:\/\/[^\s<　。、！？]+|www\.[^\s<　。、！？]+)/g;
+  return escaped.replace(urlPattern, function(url){
+    // 末尾の閉じ括弧などを除外（よくあるケース）
+    let trail='';
+    while(/[)\]）】.,;:!?]$/.test(url)){
+      trail=url.slice(-1)+trail;
+      url=url.slice(0,-1);
+    }
+    const href=url.startsWith('http')?url:'https://'+url;
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:var(--theme-main);text-decoration:underline;word-break:break-all;">${url}</a>${trail}`;
+  });
+}
+// Google Mapsで目的地を開く（住所でも施設名でもOK・APIキー不要）
+function openGoogleMaps(query){
+  if(!query) return;
+  // encodeURIComponentで日本語住所もURLセーフに変換
+  const url='https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(query);
+  // 新しいタブ/ウィンドウで開く（スマホはアプリ起動）
+  window.open(url, '_blank');
+}
+function ballTypeLabel(p){
+  if(p.ballType==='personal') return 'マイボール';
+  return 'チーム貸出'+(p.ballNumber?`（No.${p.ballNumber}）`:'');
+}
+function openDetail(id){
+  const p=players.find(x=>x.id===id); if(!p) return;
+  currentDetailId=id;
+  const photoHtml=p.photo
+    ? `<img src="${p.photo}" style="width:100%;max-height:280px;object-fit:cover;">`
+    : `<div style="height:200px;background:var(--color-background-secondary);display:flex;align-items:center;justify-content:center;color:var(--color-text-secondary);font-size:15px;">写真未登録</div>`;
+  document.getElementById('detailContent').innerHTML=`
+    <div style="background:#111;padding:16px;color:#fff;">
+      <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="background:var(--theme-main);color:var(--theme-text-on);font-size:14px;font-weight:900;padding:3px 10px;border-radius:6px;">${gradeLabel(p.grade)}</span>
+        ${p.number?`<span style="background:#fff;color:#111;font-size:14px;font-weight:900;padding:3px 10px;border-radius:6px;">#${p.number}</span>`:''}
+      </div>
+      <div style="font-size:23px;font-weight:900;margin-bottom:2px;">${p.name}</div>
+      <div style="font-size:13px;color:#aaa;letter-spacing:1px;">${p.roman||''}</div>
+    </div>
+    ${photoHtml}
+    <div style="padding:16px;">
+      <table style="width:100%;font-size:15px;border-collapse:collapse;">
+        <tr><td style="padding:8px 0;color:var(--color-text-secondary);width:40%;border-bottom:0.5px solid var(--color-border-tertiary);">学年</td><td style="padding:8px 0;font-weight:700;border-bottom:0.5px solid var(--color-border-tertiary);">${gradeLabel(p.grade)}</td></tr>
+        <tr><td style="padding:8px 0;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);">背番号</td><td style="padding:8px 0;font-weight:700;border-bottom:0.5px solid var(--color-border-tertiary);">${p.number?'#'+p.number:'-'}</td></tr>
+        <tr><td style="padding:8px 0;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);">身長</td><td style="padding:8px 0;font-weight:700;border-bottom:0.5px solid var(--color-border-tertiary);">${p.height?p.height+' cm':'-'}</td></tr>
+        <tr><td style="padding:8px 0;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);">ビブス番号</td><td style="padding:8px 0;font-weight:700;border-bottom:0.5px solid var(--color-border-tertiary);">${p.bibsNumber?'No.'+p.bibsNumber:'-'}</td></tr>
+        <tr><td style="padding:8px 0;color:var(--color-text-secondary);border-bottom:0.5px solid var(--color-border-tertiary);">ビブス所有</td><td style="padding:8px 0;font-weight:700;border-bottom:0.5px solid var(--color-border-tertiary);">${bibsOwnLabel(p.bibsOwn)}</td></tr>
+        <tr><td style="padding:8px 0;color:var(--color-text-secondary);">ボール</td><td style="padding:8px 0;font-weight:700;">${ballTypeLabel(p)}</td></tr>
+      </table>
+    </div>
+  `;
+  // 編集・削除ボタンは管理者のみ表示
+  document.getElementById('detailEditBtn').style.display=isAdmin?'flex':'none';
+  document.getElementById('detailDeleteBtn').style.display=isAdmin?'flex':'none';
+  const overlay=document.getElementById('detailModal');
+  overlay.classList.add('open');
+  document.body.style.overflow='hidden';
+  // 背景タップで閉じる
+  overlay.onclick=(e)=>{ if(e.target===overlay) closeDetail(); };
+}
+function closeDetail(){
+  document.getElementById('detailModal').classList.remove('open');
+  document.body.style.overflow='';
+  currentDetailId=null;
+  editingPlayerId=null;
+  // ボタン表示を元の状態（表示モード）に戻す
+  const bv=document.getElementById('detailBtnsView');
+  const be=document.getElementById('detailBtnsEdit');
+  if(bv) bv.style.display='flex';
+  if(be) be.style.display='none';
+}
+async function deletePlayer(){
+  if(!currentDetailId) return;
+  const p=players.find(x=>x.id===currentDetailId);
+  if(!p) return;
+  showConfirmModal({
+    title:'選手を削除',
+    body:`「${p.name}」を削除しますか？\nこの操作は取り消せません。`,
+    okLabel:'🗑️ 削除する',
+    okClass:'btn-delete',
+    onOk: async ()=>{
+      try{
+        await db.collection('players').doc(currentDetailId).delete();
+        closeDetail();
+      } catch(e){
+        alert('削除に失敗しました: '+e.message);
+        console.error(e);
+      }
+    }
+  });
+}
+// 追加・編集兼用の保存関数（Firestore）
+function savePlayer(){
+  const name=document.getElementById('fName').value.trim();
+  if(!name){ alert('名前を入力してください'); return; }
+  const roman=document.getElementById('fRoman').value.trim();
+  const grade=Number(document.getElementById('fGrade').value);
+  if(!grade){ alert('学年を選択してください'); return; }
+  const number=document.getElementById('fNumber').value;
+  const height=document.getElementById('fHeight').value;
+  // ビブス番号：数字のみを残す（"00"のような先頭ゼロも保持するためtype=textで扱う）
+  let bibsNumber=document.getElementById('fBibsNumber').value.trim().replace(/[^0-9]/g,'');
+  // 入力欄に反映（不正文字を消した結果を見せる）
+  document.getElementById('fBibsNumber').value=bibsNumber;
+  const bibsOwn=document.getElementById('fBibsOwn').value;
+  const ballType=document.getElementById('fBallType').value;
+  const ballNumber=document.getElementById('fBallNumber').value.trim();
+  const file=document.getElementById('fPhoto').files[0];
+
+  const isEdit=!!editingPlayerId;
+  showConfirmModal({
+    title: isEdit?'選手情報を保存':'選手を追加',
+    body: isEdit?`「${name}」の変更内容を保存します。\nよろしいですか？`:`「${name}」を新規選手として追加します。\nよろしいですか？`,
+    okLabel:'💾 保存する',
+    okClass:'btn-submit',
+    onOk: ()=>_doSavePlayer({name, roman, grade, number, height, bibsNumber, bibsOwn, ballType, ballNumber, file})
+  });
+}
+function _doSavePlayer(args){
+  const {name, roman, grade, number, height, bibsNumber, bibsOwn, ballType, ballNumber, file}=args;
+  const commit=async (photo)=>{
+    const data={
+      name, roman, grade,
+      number: number||null,
+      height: height?Number(height):null,
+      bibsNumber: bibsNumber||null,
+      bibsOwn,
+      ballType,
+      ballNumber: (ballType==='team')?ballNumber:'',
+      photo: photo===null ? (players.find(p=>p.id===editingPlayerId)?.photo||'') : photo
+    };
+    try{
+      if(editingPlayerId){
+        // 編集：既存IDを上書き → 詳細モーダルを表示モードに戻す
+        await db.collection('players').doc(editingPlayerId).set({...data, adminKey:ADMIN_KEY});
+        // 編集後は同じ選手の詳細表示に戻る
+        currentDetailId=editingPlayerId;
+        editingPlayerId=null;
+        // Firestore同期で最新が来るまで待たずに即座に表示を更新
+        const idx=players.findIndex(p=>p.id===currentDetailId);
+        if(idx>=0) players[idx]={id:currentDetailId, ...data};
+        switchToViewMode();
+      } else {
+        // 新規追加：自動ID → 詳細モーダルを閉じる
+        await db.collection('players').add({...data, adminKey:ADMIN_KEY});
+        closeDetail();
+        // 旧addModalも念のため閉じる（互換性のため）
+        closeAdd();
+      }
+    } catch(e){
+      alert('保存に失敗しました: '+e.message);
+      console.error(e);
+    }
+  };
+  if(file){
+    // 写真を自動リサイズ・圧縮（長辺800px、JPEG品質80%で ~100KB程度に圧縮）
+    resizeImage(file, 800, 0.8).then(dataUrl=>{
+      commit(dataUrl);
+    }).catch(err=>{
+      alert('写真の処理に失敗しました: '+err.message);
+      console.error(err);
+    });
+  } else {
+    // 編集時かつファイル未選択 → 既存写真を残す（nullを渡すと既存を維持）
+    commit(editingPlayerId ? null : '');
+  }
+}
+
+// 画像を自動リサイズ・圧縮する関数
+// - 長辺を maxSize に収める（アスペクト比は保持）
+// - JPEGに変換して quality で圧縮（base64 DataURLで返す）
+function resizeImage(file, maxSize, quality){
+  return new Promise((resolve, reject)=>{
+    if(!file.type.startsWith('image/')){ reject(new Error('画像ファイルではありません')); return; }
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error('ファイル読み込みに失敗しました'));
+    reader.onload=e=>{
+      const img=new Image();
+      img.onerror=()=>reject(new Error('画像の読み込みに失敗しました'));
+      img.onload=()=>{
+        let w=img.width, h=img.height;
+        // 長辺が maxSize を超えていたらリサイズ
+        if(w>maxSize || h>maxSize){
+          if(w>=h){ h=Math.round(h*maxSize/w); w=maxSize; }
+          else    { w=Math.round(w*maxSize/h); h=maxSize; }
+        }
+        const canvas=document.createElement('canvas');
+        canvas.width=w; canvas.height=h;
+        const ctx=canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0, w, h);
+        // JPEGで出力（PNGの透過は失うが大幅に軽量化、選手写真なので問題なし）
+        const dataUrl=canvas.toDataURL('image/jpeg', quality);
+        // 念のためサイズチェック：900KB超えなら再圧縮
+        const approxBytes=Math.ceil(dataUrl.length*3/4);
+        if(approxBytes>900*1024){
+          const dataUrl2=canvas.toDataURL('image/jpeg', 0.6);
+          resolve(dataUrl2);
+        } else {
+          resolve(dataUrl);
+        }
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// 詳細モーダル内で「表示モード」「編集モード」を切り替え
+// 編集モードに切り替え：現在の選手情報をフォームに展開
+function switchToEditMode(){
+  if(!currentDetailId) return;
+  const p=players.find(x=>x.id===currentDetailId); if(!p) return;
+  editingPlayerId=p.id;
+  renderEditForm(p);
+  document.getElementById('detailBtnsView').style.display='none';
+  document.getElementById('detailBtnsEdit').style.display='flex';
+}
+// 表示モードに戻す（キャンセル）
+function switchToViewMode(){
+  if(!currentDetailId){ closeDetail(); return; }
+  editingPlayerId=null;
+  openDetail(currentDetailId); // 詳細表示を再描画
+  document.getElementById('detailBtnsView').style.display='flex';
+  document.getElementById('detailBtnsEdit').style.display='none';
+}
+// 編集フォームHTMLをdetailContentに流し込む（新規追加フォームと同じ入力IDを使用）
+function renderEditForm(p){
+  const isNew=!p;
+  const title=isNew?'選手を追加':'選手を編集';
+  document.getElementById('detailContent').innerHTML=`
+    <div style="background:#111;padding:16px;color:#fff;">
+      <div style="font-size:21px;font-weight:900;">${title}</div>
+    </div>
+    <div style="padding:16px;">
+      <label style="font-size:14px;color:var(--color-text-secondary);display:block;margin-bottom:4px;">名前（漢字）<span style="color:#c00;">*</span></label>
+      <input type="text" id="fName" placeholder="例：山田太郎" value="${escapeHtml(p?.name||'')}" style="width:100%;padding:9px 12px;border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-secondary);color:var(--color-text-primary);font-size:15px;box-sizing:border-box;">
+
+      <label style="font-size:14px;color:var(--color-text-secondary);display:block;margin:10px 0 4px;">フリガナ（ローマ字）</label>
+      <input type="text" id="fRoman" placeholder="例：YAMADA TARO" value="${escapeHtml(p?.roman||'')}" style="width:100%;padding:9px 12px;border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-secondary);font-size:15px;box-sizing:border-box;">
+
+      <label style="font-size:14px;color:var(--color-text-secondary);display:block;margin:10px 0 4px;">学年<span style="color:#c00;">*</span></label>
+      <select id="fGrade" style="width:100%;padding:9px 12px;border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-secondary);font-size:15px;box-sizing:border-box;">
+        ${[3,2,1].map(g=>`<option value="${g}" ${p&&p.grade===g?'selected':''}>${g}年生</option>`).join('')}
+      </select>
+
+      <label style="font-size:14px;color:var(--color-text-secondary);display:block;margin:10px 0 4px;">背番号</label>
+      <input type="number" id="fNumber" placeholder="例：7" value="${p?.number||''}" style="width:100%;padding:9px 12px;border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-secondary);font-size:15px;box-sizing:border-box;">
+
+      <label style="font-size:14px;color:var(--color-text-secondary);display:block;margin:10px 0 4px;">身長 (cm)</label>
+      <input type="number" id="fHeight" placeholder="例：140" value="${p?.height||''}" style="width:100%;padding:9px 12px;border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-secondary);font-size:15px;box-sizing:border-box;">
+
+      <label style="font-size:14px;color:var(--color-text-secondary);display:block;margin:10px 0 4px;">ビブス番号</label>
+      <input type="text" id="fBibsNumber" inputmode="numeric" pattern="[0-9]*" placeholder="例：11、0、00" value="${escapeHtml(p?.bibsNumber||'')}" style="width:100%;padding:9px 12px;border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-secondary);font-size:15px;box-sizing:border-box;">
+
+      <label style="font-size:14px;color:var(--color-text-secondary);display:block;margin:10px 0 4px;">ビブス所有<span style="color:#c00;">*</span></label>
+      <select id="fBibsOwn" style="width:100%;padding:9px 12px;border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-secondary);font-size:15px;box-sizing:border-box;">
+        <option value="personal" ${(!p||p.bibsOwn==='personal')?'selected':''}>個人購入</option>
+        <option value="team" ${p&&p.bibsOwn==='team'?'selected':''}>チーム貸出</option>
+      </select>
+
+      <label style="font-size:14px;color:var(--color-text-secondary);display:block;margin:10px 0 4px;">ボール<span style="color:#c00;">*</span></label>
+      <select id="fBallType" onchange="toggleBallNumber()" style="width:100%;padding:9px 12px;border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-secondary);font-size:15px;box-sizing:border-box;">
+        <option value="team" ${(!p||p.ballType==='team')?'selected':''}>チーム貸出</option>
+        <option value="personal" ${p&&p.ballType==='personal'?'selected':''}>マイボール（個人所有）</option>
+      </select>
+
+      <div id="ballNumberBox" style="${p&&p.ballType==='personal'?'display:none;':''}">
+        <label style="font-size:14px;color:var(--color-text-secondary);display:block;margin:10px 0 4px;">チーム貸出ボール番号</label>
+        <input type="text" id="fBallNumber" placeholder="例：7 または A-3" value="${escapeHtml(p?.ballNumber||'')}" style="width:100%;padding:9px 12px;border:0.5px solid var(--color-border-secondary);border-radius:8px;background:var(--color-background-secondary);font-size:15px;box-sizing:border-box;">
+      </div>
+
+      <label style="font-size:14px;color:var(--color-text-secondary);display:block;margin:10px 0 4px;">写真</label>
+      <input type="file" id="fPhoto" accept="image/*" style="width:100%;font-size:15px;">
+      <div style="font-size:12px;color:var(--color-text-secondary);margin-top:4px;">※ 写真は自動で縮小されます（長辺800px、約100KBに圧縮）</div>
+      ${p?.photo?`<div style="margin-top:8px;"><div style="font-size:12px;color:var(--color-text-secondary);margin-bottom:4px;">現在の写真：</div><img src="${p.photo}" style="max-width:120px;max-height:120px;border-radius:8px;"></div>`:''}
+    </div>
+  `;
+}
+
+// 詳細モーダルを「追加」モードで開く（管理者専用：＋選手追加ボタンから）
+function openAddInDetail(){
+  if(!isAdmin) return;
+  currentDetailId='__new__';
+  editingPlayerId=null;
+  renderEditForm(null);
+  document.getElementById('detailBtnsView').style.display='none';
+  document.getElementById('detailBtnsEdit').style.display='flex';
+  const overlay=document.getElementById('detailModal');
+  overlay.classList.add('open');
+  document.body.style.overflow='hidden';
+  overlay.onclick=(e)=>{ if(e.target===overlay) closeDetail(); };
+}
+
+// 旧：editFromDetail（互換のため残す・switchToEditModeへ委譲）
+function editFromDetail(){ switchToEditMode(); }
+// ボール検索を実行（Enter または 検索ボタン押下時に呼ばれる）
+function executeBallSearch(){
+  // 検索ワードが空ならクリア扱い、入っていれば検索結果を描画
+  // renderPlayers内で値を見て絞り込むので、ここでは描画を呼ぶだけでOK
+  renderPlayers();
+  // 検索後、フォーカスを外してスマホのキーボードを閉じる
+  const inp=document.getElementById('searchBall');
+  if(inp) inp.blur();
+}
+// ボール検索クリア
+function clearBallSearch(){
+  document.getElementById('searchBall').value='';
+  renderPlayers();
+}
+// ビブス検索を実行（Enter または 検索ボタン押下時に呼ばれる）
+function executeBibsSearch(){
+  // 入力値の不正文字（数字以外）を除去して反映
+  const inp=document.getElementById('searchBibs');
+  if(inp){
+    inp.value=inp.value.replace(/[^0-9]/g,'');
+    inp.blur();
+  }
+  renderPlayers();
+}
+// ビブス検索クリア
+function clearBibsSearch(){
+  document.getElementById('searchBibs').value='';
+  renderPlayers();
+}
+function renderPlayers(){
+  // 学年フィルタ
+  let list=currentFilter==='all'?players.slice():players.filter(p=>p.grade===currentFilter);
+
+  // ボール番号検索（チーム貸出ボールの番号で部分一致）
+  const searchInput=document.getElementById('searchBall');
+  const searchVal=searchInput?searchInput.value.trim():'';
+  document.getElementById('searchClearBtn').style.display=searchVal?'flex':'none';
+  if(searchVal){
+    list=list.filter(p=>{
+      // ballNumberは文字列なので部分一致でOK（"12"で検索 → "12" "112" などヒット）
+      return p.ballType==='team' && p.ballNumber && String(p.ballNumber).includes(searchVal);
+    });
+  }
+
+  // ビブス番号検索（部分一致・"00"も区別）
+  const bibsInput=document.getElementById('searchBibs');
+  const bibsVal=bibsInput?bibsInput.value.trim():'';
+  const bibsClearBtn=document.getElementById('searchBibsClearBtn');
+  if(bibsClearBtn) bibsClearBtn.style.display=bibsVal?'flex':'none';
+  if(bibsVal){
+    list=list.filter(p=>{
+      return p.bibsNumber && String(p.bibsNumber).includes(bibsVal);
+    });
+  }
+
+  // ソート
+  const sortBy=document.getElementById('sortBy')?document.getElementById('sortBy').value:'grade';
+  const sorters={
+    // 学年順：6年生から1年生へ（降順）。同学年内は背番号昇順
+    grade:  (a,b)=>(b.grade-a.grade)||((a.number||999)-(b.number||999)),
+    number: (a,b)=>((a.number||999)-(b.number||999))||(b.grade-a.grade),
+    // ボール番号順：マイボール組（番号なし）は末尾に。番号は数値として比較（"7"<"12" を正しく処理）
+    ball:   (a,b)=>{
+      const av=(a.ballType==='team' && a.ballNumber!=='') ? parseInt(a.ballNumber,10) : Infinity;
+      const bv=(b.ballType==='team' && b.ballNumber!=='') ? parseInt(b.ballNumber,10) : Infinity;
+      // parseIntで NaN になる場合（例：A-3）は文字列扱いで末尾近くに
+      const aSafe=isNaN(av)?9999:av;
+      const bSafe=isNaN(bv)?9999:bv;
+      return (aSafe-bSafe)||(b.grade-a.grade);
+    },
+    bibs:   (a,b)=>{
+      const av=a.bibsNumber?parseInt(a.bibsNumber,10):Infinity;
+      const bv=b.bibsNumber?parseInt(b.bibsNumber,10):Infinity;
+      const aSafe=isNaN(av)?9999:av;
+      const bSafe=isNaN(bv)?9999:bv;
+      // 数値が同じなら、桁数の長い方（"00" > "0"）を先に表示
+      const lenDiff=(b.bibsNumber||'').length-(a.bibsNumber||'').length;
+      return (aSafe-bSafe)||lenDiff||(b.grade-a.grade);
+    }
+  };
+  list.sort(sorters[sortBy]||sorters.grade);
+
+  // 検索結果バナー（ボール検索 / ビブス検索 のどちらか・もしくは両方）
+  const banner=document.getElementById('searchHitBanner');
+  if(searchVal || bibsVal){
+    let lines=[];
+    if(searchVal){
+      if(list.length===0){
+        lines.push(`🏀 ボール番号「${searchVal}」の持ち主は見つかりません`);
+      } else if(list.length===1){
+        lines.push(`🏀 ボール番号「${searchVal}」の持ち主：${list[0].name}`);
+      } else {
+        lines.push(`🏀 ボール番号「${searchVal}」を含む選手 ${list.length}名`);
+      }
+    }
+    if(bibsVal){
+      if(list.length===0){
+        lines.push(`🦺 ビブス番号「${bibsVal}」の持ち主は見つかりません`);
+      } else if(list.length===1){
+        lines.push(`🦺 ビブス番号「${bibsVal}」の持ち主：${list[0].name}`);
+      } else {
+        lines.push(`🦺 ビブス番号「${bibsVal}」を含む選手 ${list.length}名`);
+      }
+    }
+    banner.className=(list.length===0)?'search-hit-banner empty':'search-hit-banner';
+    banner.innerHTML=lines.join('<br>');
+    banner.style.display='block';
+  } else {
+    banner.style.display='none';
+  }
+
+  document.getElementById('grid').innerHTML=list.map(p=>{
+    // ボール表示：個人はマイボール、貸出は「ボール貸出No〇〇」（番号なしは「ボール貸出」）
+    const ballTxt=(p.ballType==='personal')
+      ? 'マイボール'
+      : 'ボール貸出'+(p.ballNumber?`No${p.ballNumber}`:'');
+    // ビブス表示：番号ありなら「ビブスNo〇：個人/貸出」、番号なしなら従来通り
+    const bibsOwnTxt=(p.bibsOwn==='personal')?'個人':'貸出';
+    const bibsTxt=p.bibsNumber
+      ? `ビブスNo${p.bibsNumber}：${bibsOwnTxt}`
+      : `ビブス：${bibsOwnTxt}`;
+    return `
+    <div class="card" onclick="openDetail('${p.id}')">
+      <div class="card-accent"></div>
+      <div class="card-badges">
+        <span class="grade-badge">${gradeLabel(p.grade)}</span>
+        ${p.number?`<span class="num-badge">#${p.number}</span>`:''}
+      </div>
+      <div class="card-photo">${p.photo?`<img src="${p.photo}">`:'選手の写真'}</div>
+      <div class="player-name">${p.name}</div>
+      <div class="player-roman">${p.roman||''}</div>
+      <div class="player-info">${p.height?p.height+'cm':'-'}</div>
+      <div class="card-badges" style="margin-top:6px;margin-bottom:0;">
+        <span class="bibs-badge">${bibsTxt}</span>
+        <span class="ball-badge">${ballTxt}</span>
+      </div>
+    </div>`;
+  }).join('');
+  const all=players;
+  document.getElementById('statTotal').textContent=all.length;
+  for(let g=1; g<=6; g++){
+    const el=document.getElementById('stat'+g); if(el) el.textContent=all.filter(p=>p.grade===g).length;
+  }
+  const hs=all.filter(p=>p.height).map(p=>p.height);
+  if(hs.length){
+    document.getElementById('statAvgH').textContent=Math.round(hs.reduce((a,b)=>a+b,0)/hs.length);
+    document.getElementById('statAvgHUnit').textContent='cm';
+  } else {
+    document.getElementById('statAvgH').textContent='-';
+    document.getElementById('statAvgHUnit').textContent='';
+  }
+}
+function changeMonth(d){ calMonth+=d; if(calMonth>11){calMonth=0;calYear++;} if(calMonth<0){calMonth=11;calYear--;} renderCalendar(); }
+
+// ===== 日本の祝日判定 =====
+// 春分の日（計算式、1980〜2099年に有効）
+function vernalEquinox(y){
+  if(y>=1980 && y<=2099) return Math.floor(20.8431 + 0.242194*(y-1980) - Math.floor((y-1980)/4));
+  return 20;
+}
+// 秋分の日
+function autumnalEquinox(y){
+  if(y>=1980 && y<=2099) return Math.floor(23.2488 + 0.242194*(y-1980) - Math.floor((y-1980)/4));
+  return 23;
+}
+// ハッピーマンデー系：その月の第n月曜の日
+function nthMonday(y, m, n){
+  const first=new Date(y, m-1, 1);
+  const firstMon=(8 - first.getDay()) % 7 + 1; // 月曜になる最初の日
+  return firstMon + (n-1)*7;
+}
+// y年m月d日が祝日なら祝日名、違うなら null
+function getHolidayName(y, m, d){
+  // 固定祝日
+  if(m===1 && d===1) return '元日';
+  if(m===2 && d===11) return '建国記念の日';
+  if(m===2 && d===23) return '天皇誕生日';
+  if(m===4 && d===29) return '昭和の日';
+  if(m===5 && d===3) return '憲法記念日';
+  if(m===5 && d===4) return 'みどりの日';
+  if(m===5 && d===5) return 'こどもの日';
+  if(m===8 && d===11) return '山の日';
+  if(m===11 && d===3) return '文化の日';
+  if(m===11 && d===23) return '勤労感謝の日';
+  // ハッピーマンデー
+  if(m===1 && d===nthMonday(y,1,2)) return '成人の日';
+  if(m===7 && d===nthMonday(y,7,3)) return '海の日';
+  if(m===9 && d===nthMonday(y,9,3)) return '敬老の日';
+  if(m===10 && d===nthMonday(y,10,2)) return 'スポーツの日';
+  // 春分・秋分
+  if(m===3 && d===vernalEquinox(y)) return '春分の日';
+  if(m===9 && d===autumnalEquinox(y)) return '秋分の日';
+  // 振替休日（日曜が祝日の場合、その後の最初の平日が振替休日）
+  // d から過去方向に遡り、祝日ではない日を飛ばして日曜の祝日があれば振替休日
+  // ただし d 自身が元々祝日の場合は上でreturn済みなのでここには来ない
+  const curDate=new Date(y, m-1, d);
+  // 月曜以降の平日でのみ判定
+  if(curDate.getDay() >= 1){
+    // 遡って連続した祝日をスキップし、日曜にたどり着いたらそれが祝日かチェック
+    let check=new Date(curDate);
+    check.setDate(check.getDate()-1);
+    // check が祝日である間は遡る
+    while(check.getDay() !== 0){
+      const cy=check.getFullYear(), cm=check.getMonth()+1, cd=check.getDate();
+      if(!getHolidayNameBase(cy, cm, cd)) break;
+      check.setDate(check.getDate()-1);
+    }
+    // check が日曜になったら祝日か判定
+    if(check.getDay() === 0){
+      const cy=check.getFullYear(), cm=check.getMonth()+1, cd=check.getDate();
+      if(getHolidayNameBase(cy, cm, cd)) return '振替休日';
+    }
+  }
+  return null;
+}
+// 振替休日判定用（振替自身を再帰させないベース関数）
+function getHolidayNameBase(y, m, d){
+  if(m===1 && d===1) return '元日';
+  if(m===2 && d===11) return '建国記念の日';
+  if(m===2 && d===23) return '天皇誕生日';
+  if(m===4 && d===29) return '昭和の日';
+  if(m===5 && d===3) return '憲法記念日';
+  if(m===5 && d===4) return 'みどりの日';
+  if(m===5 && d===5) return 'こどもの日';
+  if(m===8 && d===11) return '山の日';
+  if(m===11 && d===3) return '文化の日';
+  if(m===11 && d===23) return '勤労感謝の日';
+  if(m===1 && d===nthMonday(y,1,2)) return '成人の日';
+  if(m===7 && d===nthMonday(y,7,3)) return '海の日';
+  if(m===9 && d===nthMonday(y,9,3)) return '敬老の日';
+  if(m===10 && d===nthMonday(y,10,2)) return 'スポーツの日';
+  if(m===3 && d===vernalEquinox(y)) return '春分の日';
+  if(m===9 && d===autumnalEquinox(y)) return '秋分の日';
+  return null;
+}
+
+// 苗字を抽出するヘルパ：選手の name から先頭の漢字/カタカナ/ひらがな部分を取り出す
+// 例：「山田 太郎」→「山田」、「田中ゆう」→「田中」、「Yamada Taro」→「Yamada」
+// スペース区切りがあればそこで切る、なければ最初の漢字連続部分を苗字とみなす
+function extractLastName(fullName){
+  if(!fullName) return '';
+  const trimmed=String(fullName).trim();
+  // 全角/半角スペース区切りなら先頭部分を採用
+  const parts=trimmed.split(/[\s　]+/);
+  if(parts.length>=2 && parts[0]) return parts[0];
+  // スペースなしの場合：最長2文字までを苗字とみなす（日本人名ヒューリスティック）
+  // 4文字以下なら全部、5文字以上なら最初の2文字
+  if(trimmed.length<=4) return trimmed;
+  return trimmed.slice(0, 2);
+}
+
+// 当番者選択用の候補を生成：選手データから苗字を抽出し、重複時はフルネームで区別
+// 戻り値：[{value: "山田 太郎", label: "山田（太郎）"}, ...]
+function buildDutyCandidates(){
+  const list=players.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'', 'ja'));
+  // 各選手の苗字を出して、重複苗字を検出
+  const lastNameCount={};
+  list.forEach(p=>{
+    const ln=extractLastName(p.name);
+    lastNameCount[ln]=(lastNameCount[ln]||0)+1;
+  });
+  // ラベル生成
+  return list.map(p=>{
+    const ln=extractLastName(p.name);
+    const isDup=lastNameCount[ln]>1;
+    // 下の名前を抽出（スペース区切りなら2要素目以降、なければ苗字以外の部分）
+    const trimmed=(p.name||'').trim();
+    const parts=trimmed.split(/[\s　]+/);
+    const firstName=parts.length>=2 ? parts.slice(1).join(' ') : trimmed.slice(ln.length);
+    const label=isDup && firstName ? `${ln}（${firstName}）` : ln;
+    return { value:p.name, label, lastName:ln, fullName:p.name };
+  });
+}
+
+// 当番ラベル
+const DUTY_INFO={
+  key:  { label:'🔑 鍵当番', count:1, short:'🔑' },
+  goal: { label:'🥅 ゴール当番', count:3, short:'🥅' }
+};
+
+function renderCalendar(){
+  const y=calYear,m=calMonth;
+  document.getElementById('calTitle').textContent=`${y}年${m+1}月`;
+  // 月次メッセージ表示
+  renderMonthlyMessage();
+  // 曜日ヘッダー描画
+  renderDowRow();
+  const first=new Date(y,m,1).getDay();
+  const days=new Date(y,m+1,0).getDate();
+  const todayStr=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  let html='';
+  for(let i=0;i<first;i++) html+=`<div class="cal-day empty"></div>`;
+  for(let d=1;d<=days;d++){
+    const dateStr=`${y}-${String(m+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const dayEvs=schedules.filter(s=>s.date===dateStr);
+    const isToday=dateStr===todayStr;
+    const holiday=getHolidayName(y, m+1, d);
+    // クリック処理：管理者は編集モーダル、閲覧者は予定があるときだけ詳細ポップアップ
+    let clickAttr='';
+    if(isAdmin){
+      clickAttr=`onclick="openScheduleModal('${dateStr}')"`;
+    } else if(dayEvs.length>0){
+      clickAttr=`onclick="openDayDetailModal('${dateStr}')"`;
+    }
+    const holidayClass=holiday?' holiday':'';
+    const holidayLabel=holiday?`<div class="cal-day-holiday-name" title="${holiday}">${holiday}</div>`:'';
+    // 当番表示：その日の各イベントから当番情報を抽出して短縮表示
+    let dutyHtml='';
+    dayEvs.forEach(e=>{
+      if(e.duty && e.duty.length){
+        const info=DUTY_INFO[e.dutyType];
+        if(info){
+          const names=e.duty.filter(n=>n).map(n=>extractLastName(n)).join('/');
+          if(names) dutyHtml+=`<div class="cal-day-duty" title="${info.label}：${e.duty.filter(n=>n).join('・')}">${info.short}${names}</div>`;
+        }
+      }
+    });
+    // 閲覧者で予定なしの日はカーソルを通常に
+    const cursorStyle=(!isAdmin && dayEvs.length===0)?'style="cursor:default;"':'';
+    html+=`<div class="cal-day${isToday?' today':''}${holidayClass}" ${cursorStyle} ${clickAttr}>
+      <div class="cal-day-num">${d}</div>
+      ${holidayLabel}
+      ${dutyHtml}
+      ${dayEvs.map(e=>{
+        const disp=e.title.length>6?e.title.slice(0,6)+'…':e.title;
+        return `<div class="cal-event ${TYPE_CLASS[e.type]}" title="${e.title}">${disp}</div>`;
+      }).join('')}
+    </div>`;
+  }
+  document.getElementById('calDays').innerHTML=html;
+  renderScheduleList();
+}
+
+// 月次メッセージ表示
+function renderMonthlyMessage(){
+  const y=calYear,m=calMonth;
+  const key=`${y}-${String(m+1).padStart(2,'0')}`;
+  document.getElementById('monthlyMsgMonth').textContent=`${y}年${m+1}月`;
+  document.getElementById('monthlyMsgEditBtn').style.display=isAdmin?'block':'none';
+  const body=monthlyMessages[key]?monthlyMessages[key].body:'';
+  const bodyEl=document.getElementById('monthlyMsgBody');
+  if(body && body.trim()){
+    bodyEl.innerHTML=linkify(body);
+    bodyEl.classList.remove('empty');
+  } else {
+    bodyEl.textContent='（未設定）';
+    bodyEl.classList.add('empty');
+  }
+}
+
+// ===== 閲覧者向け：その日の予定詳細ポップアップ =====
+function openDayDetailModal(dateStr){
+  if(!dateStr) return;
+  const dayEvs=schedules.filter(s=>s.date===dateStr).sort((a,b)=>(a.start||'').localeCompare(b.start||''));
+  if(dayEvs.length===0) return;
+  const dt=new Date(dateStr+'T00:00:00');
+  const titleStr=`${dt.getFullYear()}年${dt.getMonth()+1}月${dt.getDate()}日（${WEEKDAYS[dt.getDay()]}）の予定`;
+  document.getElementById('dayDetailTitle').textContent=titleStr;
+  // 各予定をカード状に並べる
+  const html=dayEvs.map(s=>{
+    const timeStr=s.start?`${s.start}${s.end?'〜'+s.end:''}`:'';
+    let dutyHtml='';
+    if(s.dutyType && DUTY_INFO[s.dutyType] && Array.isArray(s.duty)){
+      const names=s.duty.filter(n=>n);
+      if(names.length){
+        dutyHtml=`<div style="margin-top:6px;color:#c97a2b;font-weight:700;font-size:17px;">${DUTY_INFO[s.dutyType].label}：${escapeHtml(names.join('・'))}</div>`;
+      }
+    }
+    const destHtml=s.destination
+      ? `<div style="margin-top:4px;font-size:17px;"><a href="javascript:void(0)" onclick="openGoogleMaps('${escapeHtml(s.destination).replace(/'/g,"\\'")}')" class="map-link">📍 ${escapeHtml(s.destination)}</a></div>`
+      : '';
+    const memoHtml=s.memo?`<div style="margin-top:6px;font-size:17px;color:var(--color-text-secondary);white-space:pre-wrap;line-height:1.5;">${linkify(s.memo)}</div>`:'';
+    return `<div style="background:#ffffff;border:1px solid var(--theme-light);border-radius:10px;padding:12px 14px;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;">
+        <span class="schedule-type ${TYPE_CLASS[s.type]}">${TYPE_LABEL[s.type]}</span>
+        ${timeStr?`<span style="font-size:17px;font-weight:700;color:var(--theme-dark);">${timeStr}</span>`:''}
+      </div>
+      <div style="font-size:19px;font-weight:700;color:var(--color-text-primary);margin-bottom:2px;">${escapeHtml(s.title)}</div>
+      ${s.place?`<div style="font-size:17px;color:var(--color-text-secondary);">${escapeHtml(s.place)}</div>`:''}
+      ${destHtml}
+      ${dutyHtml}
+      ${memoHtml}
+    </div>`;
+  }).join('');
+  document.getElementById('dayDetailBody').innerHTML=html;
+  document.getElementById('dayDetailModal').classList.add('open');
+}
+function closeDayDetailModal(){
+  document.getElementById('dayDetailModal').classList.remove('open');
+}
+
+// 曜日ヘッダー行の描画
+const DOW_NAMES=['日','月','火','水','木','金','土'];
+function renderDowRow(){
+  const row=document.getElementById('calDowRow');
+  let html='';
+  for(let i=0;i<7;i++){
+    const set=dowSettings[String(i)] || dowSettings[i] || {};
+    const hasSet=set.place || set.start || set.duty;
+    const adminClick=isAdmin?`onclick="openDowSetModal(${i})"`:'';
+    const adminCursor=isAdmin?'cursor:pointer;':'';
+    let inner=`<div style="font-weight:700;font-size:13px;">${DOW_NAMES[i]}</div>`;
+    if(hasSet){
+      if(set.place) inner+=`<div class="cal-dow-place">${escapeHtml(set.place)}</div>`;
+      if(set.start || set.end){
+        const t=`${set.start||''}${set.end?'〜'+set.end:''}`;
+        inner+=`<div class="cal-dow-time">${t}</div>`;
+      }
+      if(set.duty && DUTY_INFO[set.duty]){
+        inner+=`<div class="cal-dow-duty-label">${DUTY_INFO[set.duty].label}</div>`;
+      }
+    } else if(isAdmin){
+      inner+=`<div style="font-size:10px;color:var(--color-text-secondary);">タップで設定</div>`;
+    }
+    html+=`<div class="cal-dow-cell cal-dow-cell-set" style="${adminCursor}" ${adminClick}>${inner}</div>`;
+  }
+  row.innerHTML=html;
+}
+function renderScheduleList(){
+  const y=calYear,m=calMonth;
+  const monthEvs=schedules.filter(s=>{ const [sy,sm]=s.date.split('-').map(Number); return sy===y&&sm===m+1; }).sort((a,b)=>a.date.localeCompare(b.date));
+  const titleHtml=`<div class="schedule-list-title">📋 ${y}年${m+1}月の予定（${monthEvs.length}件）</div>`;
+  if(monthEvs.length===0){ document.getElementById('scheduleList').innerHTML=titleHtml+`<div style="text-align:center;padding:20px;color:var(--color-text-secondary);font-size:15px;">この月の予定はありません</div>`; return; }
+  document.getElementById('scheduleList').innerHTML=titleHtml+monthEvs.map(s=>{
+    const d=new Date(s.date+'T00:00:00');
+    const editBtn=isAdmin?`<button class="schedule-edit-btn" onclick="editSchedule('${s.id}')">編集</button>`:'';
+    const timeStr=s.start?`${s.start}${s.end?'〜'+s.end:''} `:'';
+    // 当番表示
+    let dutyHtml='';
+    if(s.duty && s.duty.length && DUTY_INFO[s.dutyType]){
+      const names=s.duty.filter(n=>n);
+      if(names.length){
+        dutyHtml=`<div class="schedule-detail" style="margin-top:4px;color:#c97a2b;font-weight:700;">${DUTY_INFO[s.dutyType].label}：${escapeHtml(names.join('・'))}</div>`;
+      }
+    }
+    return `<div class="schedule-item">
+      <div class="schedule-date-box">
+        <div class="schedule-month">${m+1}月</div>
+        <div class="schedule-day">${d.getDate()}</div>
+        <div class="schedule-weekday">${WEEKDAYS[d.getDay()]}</div>
+      </div>
+      <div class="schedule-info">
+        <span class="schedule-type ${TYPE_CLASS[s.type]}">${TYPE_LABEL[s.type]}</span>
+        <div class="schedule-title">${escapeHtml(s.title)}</div>
+        <div class="schedule-detail">${timeStr}${escapeHtml(s.place||'')}</div>
+        ${s.destination?`<div class="schedule-detail" style="margin-top:4px;"><a href="javascript:void(0)" onclick="openGoogleMaps('${escapeHtml(s.destination).replace(/'/g,"\\'")}')" class="map-link">📍 ${escapeHtml(s.destination)}</a></div>`:''}
+        ${dutyHtml}
+        ${s.memo?`<div class="schedule-detail" style="margin-top:2px;white-space:pre-wrap;">${linkify(s.memo)}</div>`:''}
+      </div>
+      ${editBtn}
+    </div>`;
+  }).join('');
+}
+function openScheduleModal(dateStr){
+  if(!isAdmin) return;
+  editingScheduleId=null;
+  document.getElementById('scheduleModalTitle').textContent='予定を追加';
+  document.getElementById('sDate').value=dateStr||'';
+  document.getElementById('sType').value='practice';
+  document.getElementById('sTitle').value='';
+  document.getElementById('sStart').value='';
+  document.getElementById('sEnd').value='';
+  document.getElementById('sPlace').value='';
+  document.getElementById('sDestination').value='';
+  document.getElementById('sMemo').value='';
+  document.getElementById('sDeleteBtn').style.display='none';
+  // 曜日設定があればtitleや会場・時間にデフォルト値を流し込む
+  if(dateStr){
+    const dt=new Date(dateStr+'T00:00:00');
+    const dow=dt.getDay();
+    const set=dowSettings[String(dow)] || dowSettings[dow] || {};
+    if(set.place) document.getElementById('sPlace').value=set.place;
+    if(set.start) document.getElementById('sStart').value=set.start;
+    if(set.end) document.getElementById('sEnd').value=set.end;
+  }
+  // 当番欄の描画
+  renderDutySection(dateStr, null);
+  document.getElementById('scheduleModal').classList.add('open');
+}
+function editSchedule(id){
+  if(!isAdmin) return;
+  const s=schedules.find(x=>x.id===id); if(!s) return;
+  editingScheduleId=id;
+  document.getElementById('scheduleModalTitle').textContent='予定を編集';
+  document.getElementById('sDate').value=s.date;
+  document.getElementById('sType').value=s.type;
+  document.getElementById('sTitle').value=s.title;
+  document.getElementById('sStart').value=s.start||'';
+  document.getElementById('sEnd').value=s.end||'';
+  document.getElementById('sPlace').value=s.place||'';
+  document.getElementById('sDestination').value=s.destination||'';
+  document.getElementById('sMemo').value=s.memo||'';
+  // 当番欄の描画（既存の値で）
+  renderDutySection(s.date, s);
+  const delBtn=document.getElementById('sDeleteBtn');
+  delBtn.style.display='block';
+  delBtn.style.flex='1';
+  document.getElementById('scheduleModal').classList.add('open');
+}
+
+// 日程モーダルの当番欄を動的描画
+// dateStr: "YYYY-MM-DD"、existing: 既存scheduleオブジェクト or null
+function renderDutySection(dateStr, existing){
+  const section=document.getElementById('sDutySection');
+  if(!dateStr){ section.style.display='none'; return; }
+  const dt=new Date(dateStr+'T00:00:00');
+  const dow=dt.getDay();
+  const set=dowSettings[String(dow)] || dowSettings[dow] || {};
+  if(!set.duty || !DUTY_INFO[set.duty]){ section.style.display='none'; return; }
+  const info=DUTY_INFO[set.duty];
+  document.getElementById('sDutySectionTitle').textContent=info.label+`（${info.count}名）`;
+  // 候補生成
+  const candidates=buildDutyCandidates();
+  // 既存値（同じ当番タイプならそのまま、違う当番タイプなら空配列）
+  const prev=(existing && existing.dutyType===set.duty && Array.isArray(existing.duty)) ? existing.duty : [];
+  const rows=[];
+  for(let i=0;i<info.count;i++){
+    const sel=prev[i]||'';
+    const opts=`<option value="">（未選択）</option>` + candidates.map(c=>{
+      const selAttr=(c.value===sel)?' selected':'';
+      return `<option value="${escapeHtml(c.value)}"${selAttr}>${escapeHtml(c.label)}</option>`;
+    }).join('');
+    // 既存値が候補に無い場合（削除された選手）は手入力テキストで保持
+    const isInList=candidates.some(c=>c.value===sel);
+    const customRow=(sel && !isInList)
+      ? `<div style="font-size:12px;color:#c97a2b;margin-top:2px;">※ 旧データ：${escapeHtml(sel)}（保存すると消えます）</div>`
+      : '';
+    rows.push(`<div class="duty-row">
+      <select class="duty-select" data-idx="${i}">${opts}</select>
+      ${customRow}
+    </div>`);
+  }
+  document.getElementById('sDutyRows').innerHTML=rows.join('');
+  section.style.display='block';
+  // データ属性で当番タイプを保持
+  section.dataset.dutyType=set.duty;
+}
+function closeScheduleModal(){ document.getElementById('scheduleModal').classList.remove('open'); }
+async function deleteSchedule(){
+  if(!editingScheduleId){ alert('削除対象がありません'); return; }
+  const s=schedules.find(x=>x.id===editingScheduleId);
+  const title=s?s.title:'この予定';
+  showConfirmModal({
+    title:'予定を削除',
+    body:`「${title}」を削除しますか？\nこの操作は取り消せません。`,
+    okLabel:'🗑️ 削除する',
+    okClass:'btn-delete',
+    onOk: async ()=>{
+      try{
+        await db.collection('schedules').doc(editingScheduleId).delete();
+        editingScheduleId=null;
+        closeScheduleModal();
+      } catch(e){
+        alert('削除に失敗しました: '+e.message);
+        console.error(e);
+      }
+    }
+  });
+}
+
+// ===== Excel出力 =====
+function openExcelModal(){
+  if(!isAdmin) return;
+  // デフォルトで今年の1月1日〜12月31日をセット
+  const y=new Date().getFullYear();
+  document.getElementById('excelFrom').value=`${y}-01-01`;
+  document.getElementById('excelTo').value=`${y}-12-31`;
+  document.getElementById('excelModal').classList.add('open');
+}
+function closeExcelModal(){ document.getElementById('excelModal').classList.remove('open'); }
+function exportExcel(){
+  const from=document.getElementById('excelFrom').value;
+  const to=document.getElementById('excelTo').value;
+  let data=schedules.sort((a,b)=>a.date.localeCompare(b.date));
+  if(from) data=data.filter(s=>s.date>=from);
+  if(to)   data=data.filter(s=>s.date<=to);
+  if(!data.length){ alert('該当する日程がありません'); return; }
+  const rows=data.map(s=>{
+    const d=new Date(s.date+'T00:00:00');
+    const weekday=['日','月','火','水','木','金','土'][d.getDay()];
+    // 当番表記：種別ラベル＋名前リスト
+    let dutyLabel='';
+    if(s.dutyType && DUTY_INFO[s.dutyType] && Array.isArray(s.duty)){
+      const names=s.duty.filter(n=>n);
+      if(names.length){
+        dutyLabel=DUTY_INFO[s.dutyType].label+'：'+names.join('・');
+      }
+    }
+    return {
+      '日付':s.date,
+      '曜日':weekday,
+      '種別':TYPE_LABEL[s.type]||s.type,
+      'タイトル':s.title,
+      '開始時間':s.start||'',
+      '終了時間':s.end||'',
+      '場所':s.place||'',
+      '目的地':s.destination||'',
+      '当番':dutyLabel,
+      'メモ':s.memo||''
+    };
+  });
+  // SheetJS でExcel生成
+  const ws=XLSX.utils.json_to_sheet(rows);
+  // 列幅設定
+  ws['!cols']=[{wch:12},{wch:6},{wch:10},{wch:30},{wch:10},{wch:10},{wch:20},{wch:30},{wch:25},{wch:30}];
+  const wb=XLSX.utils.book_new();
+  const label=(from&&to)?`${from}_${to}`:(from?`${from}以降`:(to?`${to}まで`:'全期間'));
+  XLSX.utils.book_append_sheet(wb,ws,'日程');
+  XLSX.writeFile(wb,`日程_${label}.xlsx`);
+  closeExcelModal();
+}
+
+// ===== 選手Excel出力 =====
+function exportPlayerExcel(){
+  if(!players.length){ alert('選手データがありません'); return; }
+  const rows=[...players]
+    .sort((a,b)=>a.grade-b.grade||((a.number||999)-(b.number||999)))
+    .map(p=>({
+      '学年': gradeLabel(p.grade),
+      '背番号': p.number||'',
+      '名前': p.name,
+      'フリガナ': p.roman||'',
+      '身長(cm)': p.height||'',
+      'ビブス番号': p.bibsNumber||'',
+      'ビブス所有': bibsOwnLabel(p.bibsOwn),
+      'ボール種別': (p.ballType==='personal')?'マイボール':'チーム貸出',
+      'チーム貸出ボール番号': (p.ballType==='team')?(p.ballNumber||''):''
+    }));
+  const ws=XLSX.utils.json_to_sheet(rows);
+  ws['!cols']=[{wch:6},{wch:8},{wch:14},{wch:20},{wch:10},{wch:10},{wch:12},{wch:14},{wch:18}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'選手一覧');
+  XLSX.writeFile(wb,'選手一覧.xlsx');
+}
+async function saveSchedule(){
+  const date=document.getElementById('sDate').value;
+  const title=document.getElementById('sTitle').value.trim();
+  if(!date||!title){ alert('日付とタイトルを入力してください'); return; }
+  // 当番情報を収集
+  const section=document.getElementById('sDutySection');
+  let dutyType=null, duty=[];
+  if(section && section.style.display!=='none'){
+    dutyType=section.dataset.dutyType||null;
+    const selects=section.querySelectorAll('.duty-select');
+    selects.forEach(sel=>{ duty.push(sel.value||''); });
+  }
+  const data={ date, type:document.getElementById('sType').value, title, start:document.getElementById('sStart').value, end:document.getElementById('sEnd').value, place:document.getElementById('sPlace').value.trim(), destination:document.getElementById('sDestination').value.trim(), memo:document.getElementById('sMemo').value.trim(), dutyType, duty };
+  const isEdit=!!editingScheduleId;
+  showConfirmModal({
+    title: isEdit?'予定を保存':'予定を追加',
+    body: isEdit?`「${title}」の変更内容を保存します。\nよろしいですか？`:`「${title}」を新規予定として追加します。\nよろしいですか？`,
+    okLabel:'💾 保存する',
+    okClass:'btn-submit',
+    onOk: async ()=>{
+      try{
+        if(editingScheduleId){
+          await db.collection('schedules').doc(editingScheduleId).set({...data, adminKey:ADMIN_KEY});
+        } else {
+          await db.collection('schedules').add({...data, adminKey:ADMIN_KEY});
+        }
+        closeScheduleModal();
+      } catch(e){
+        alert('保存に失敗しました: '+e.message);
+        console.error(e);
+      }
+    }
+  });
+}
+
+// ===== 月次固定メッセージ =====
+function openMonthlyMsgModal(){
+  if(!isAdmin) return;
+  const y=calYear,m=calMonth;
+  const key=`${y}-${String(m+1).padStart(2,'0')}`;
+  document.getElementById('monthlyMsgModalMonth').textContent=`${y}年${m+1}月`;
+  document.getElementById('mMsgBody').value=monthlyMessages[key]?(monthlyMessages[key].body||''):'';
+  document.getElementById('monthlyMsgModal').classList.add('open');
+}
+function closeMonthlyMsgModal(){
+  document.getElementById('monthlyMsgModal').classList.remove('open');
+}
+async function saveMonthlyMsg(){
+  if(!isAdmin) return;
+  const y=calYear,m=calMonth;
+  const key=`${y}-${String(m+1).padStart(2,'0')}`;
+  const body=document.getElementById('mMsgBody').value;
+  const isClear=!body.trim();
+  showConfirmModal({
+    title: isClear?'お知らせをクリア':'お知らせを保存',
+    body: isClear?`${y}年${m+1}月のお知らせをクリアします。\nよろしいですか？`:`${y}年${m+1}月のお知らせを保存します。\nよろしいですか？`,
+    okLabel: isClear?'🗑️ クリアする':'💾 保存する',
+    okClass: isClear?'btn-delete':'btn-submit',
+    onOk: async ()=>{
+      try{
+        if(body.trim()){
+          await db.collection('monthlyMessages').doc(key).set({body, updatedAt:Date.now(), adminKey:ADMIN_KEY});
+        } else {
+          // 空欄なら削除
+          await db.collection('monthlyMessages').doc(key).delete().catch(()=>{});
+        }
+        closeMonthlyMsgModal();
+      } catch(e){
+        alert('保存に失敗しました: '+e.message);
+        console.error(e);
+      }
+    }
+  });
+}
+
+// ===== 曜日ヘッダー設定 =====
+let editingDow=null;
+function openDowSetModal(dow){
+  if(!isAdmin) return;
+  editingDow=dow;
+  document.getElementById('dowSetTitle').textContent=DOW_NAMES[dow]+'曜日';
+  const set=dowSettings[String(dow)] || dowSettings[dow] || {};
+  document.getElementById('dPlace').value=set.place||'';
+  document.getElementById('dStart').value=set.start||'';
+  document.getElementById('dEnd').value=set.end||'';
+  document.getElementById('dDuty').value=set.duty||'none';
+  document.getElementById('dowSetModal').classList.add('open');
+}
+function closeDowSetModal(){
+  document.getElementById('dowSetModal').classList.remove('open');
+  editingDow=null;
+}
+async function saveDowSet(){
+  if(!isAdmin || editingDow===null) return;
+  const place=document.getElementById('dPlace').value.trim();
+  const start=document.getElementById('dStart').value;
+  const end=document.getElementById('dEnd').value;
+  const duty=document.getElementById('dDuty').value;
+  const dowName=DOW_NAMES[editingDow];
+  const newSettings={...dowSettings};
+  newSettings[String(editingDow)]={place, start, end, duty: duty==='none'?'':duty};
+  showConfirmModal({
+    title:'曜日設定を保存',
+    body:`${dowName}曜日の固定設定を保存します。\nよろしいですか？`,
+    okLabel:'💾 保存する',
+    okClass:'btn-submit',
+    onOk: async ()=>{
+      try{
+        await db.collection('settings').doc('dow').set({...newSettings, adminKey:ADMIN_KEY});
+        closeDowSetModal();
+      } catch(e){
+        alert('保存に失敗しました: '+e.message);
+        console.error(e);
+      }
+    }
+  });
+}
+async function clearDowSet(){
+  if(!isAdmin || editingDow===null) return;
+  const dowName=DOW_NAMES[editingDow];
+  const newSettings={...dowSettings};
+  delete newSettings[String(editingDow)];
+  delete newSettings[editingDow];
+  showConfirmModal({
+    title:'曜日設定をクリア',
+    body:`${dowName}曜日の固定設定をクリアします。\nよろしいですか？`,
+    okLabel:'🗑️ クリアする',
+    okClass:'btn-delete',
+    onOk: async ()=>{
+      try{
+        await db.collection('settings').doc('dow').set({...newSettings, adminKey:ADMIN_KEY});
+        closeDowSetModal();
+      } catch(e){
+        alert('保存に失敗しました: '+e.message);
+        console.error(e);
+      }
+    }
+  });
+}
+
+// ===== インフォメーション =====
+// 投稿者の色は3バージョン（金/緑/赤）どれとも被らないよう独立した3色を採用
+const FROM_COLOR={監督:'#ea6a1f', コーチ:'#2563eb', 保護者会:'#8b3fc0'};
+
+function renderInfos(){
+  // インフォタブ一覧
+  const listEl=document.getElementById('infoList');
+  document.getElementById('addInfoBtn').style.display=isAdmin?'block':'none';
+  if(!infos.length){
+    listEl.innerHTML='<div style="text-align:center;padding:40px 0;color:var(--color-text-secondary);font-size:18px;">インフォメーションはありません</div>';
+  } else {
+    const sorted=[...infos].sort((a,b)=>b.createdAt-a.createdAt);
+    listEl.innerHTML=sorted.map(info=>{
+      const d=new Date(info.createdAt);
+      const dateStr=`${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+      const editBtn=isAdmin?`<button class="schedule-edit-btn" onclick="openInfoModal('${info.id}')" style="flex-shrink:0;">編集</button>`:'';
+      const color=FROM_COLOR[info.from]||'#888';
+      return `<div style="background:var(--color-background-primary);border-radius:14px;border:0.5px solid var(--color-border-tertiary);padding:14px;margin-bottom:10px;border-left:4px solid ${color};">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+              <span style="background:${color};color:#fff;font-size:16px;font-weight:700;padding:3px 12px;border-radius:20px;letter-spacing:0.5px;">${info.from}</span>
+              <span style="font-size:16px;color:var(--color-text-secondary);">${dateStr}</span>
+            </div>
+            <div style="font-size:19px;font-weight:700;color:var(--color-text-primary);margin-bottom:6px;">${escapeHtml(info.title)}</div>
+            <div style="font-size:18px;color:var(--color-text-secondary);white-space:pre-wrap;line-height:1.6;">${linkify(info.body)}</div>
+          </div>
+          ${editBtn}
+        </div>
+      </div>`;
+    }).join('');
+  }
+  renderTopInfoBanner();
+}
+
+function renderTopInfoBanner(){
+  const banner=document.getElementById('topInfoBanner');
+  if(!infos.length){ banner.style.display='none'; return; }
+  const sorted=[...infos].sort((a,b)=>b.createdAt-a.createdAt);
+  // 最新3件まで表示
+  const items=sorted.slice(0,3);
+  banner.style.display='block';
+  banner.innerHTML=`
+    <div style="padding:10px 12px 4px;background:var(--color-background-tertiary);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <span style="font-size:16px;font-weight:700;color:var(--color-text-secondary);letter-spacing:1px;">📢 INFORMATION</span>
+        <span onclick="switchTab('info')" style="font-size:16px;color:var(--theme-main);cursor:pointer;font-weight:700;">すべて見る →</span>
+      </div>
+      ${items.map(info=>{
+        const color=FROM_COLOR[info.from]||'#888';
+        const d=new Date(info.createdAt);
+        const dateStr=`${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        const bodyPreview=info.body.replace(/\n/g,' ');
+        return `<div onclick="switchTab('info')" style="background:var(--color-background-primary);border-radius:10px;border-left:4px solid ${color};padding:10px 14px;margin-bottom:8px;cursor:pointer;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px;">
+            <span style="background:${color};color:#fff;font-size:14px;font-weight:700;padding:2px 8px;border-radius:4px;letter-spacing:0.5px;">${info.from}</span>
+            <span style="font-size:16px;color:var(--color-text-secondary);">${dateStr}</span>
+          </div>
+          <div style="font-size:18px;font-weight:700;color:var(--color-text-primary);margin-bottom:3px;">${escapeHtml(info.title)}</div>
+          <div style="font-size:17px;color:var(--color-text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(bodyPreview)}</div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function openInfoModal(id){
+  editingInfoId=id;
+  if(id){
+    const info=infos.find(x=>x.id===id); if(!info) return;
+    document.getElementById('infoModalTitle').textContent='インフォを編集';
+    document.getElementById('iFrom').value=info.from;
+    document.getElementById('iTitle').value=info.title;
+    document.getElementById('iBody').value=info.body;
+    document.getElementById('iDeleteBtn').style.display='block';
+  } else {
+    document.getElementById('infoModalTitle').textContent='インフォを投稿';
+    document.getElementById('iFrom').value='監督';
+    document.getElementById('iTitle').value='';
+    document.getElementById('iBody').value='';
+    document.getElementById('iDeleteBtn').style.display='none';
+  }
+  document.getElementById('infoModal').classList.add('open');
+}
+function closeInfoModal(){ document.getElementById('infoModal').classList.remove('open'); }
+async function saveInfo(){
+  const title=document.getElementById('iTitle').value.trim();
+  const body=document.getElementById('iBody').value.trim();
+  if(!title||!body){ alert('タイトルと内容を入力してください'); return; }
+  const data={
+    from:document.getElementById('iFrom').value,
+    title, body,
+    createdAt:editingInfoId?(infos.find(x=>x.id===editingInfoId)?.createdAt||Date.now()):Date.now()
+  };
+  const isEdit=!!editingInfoId;
+  showConfirmModal({
+    title: isEdit?'インフォを保存':'インフォを投稿',
+    body: isEdit?`「${title}」の変更内容を保存します。\nよろしいですか？`:`「${title}」を投稿します。\nよろしいですか？`,
+    okLabel: isEdit?'💾 保存する':'📢 投稿する',
+    okClass:'btn-submit',
+    onOk: async ()=>{
+      try{
+        if(editingInfoId){
+          await db.collection('infos').doc(editingInfoId).set({...data, adminKey:ADMIN_KEY});
+        } else {
+          await db.collection('infos').add({...data, adminKey:ADMIN_KEY});
+        }
+        closeInfoModal();
+      } catch(e){
+        alert('保存に失敗しました: '+e.message);
+        console.error(e);
+      }
+    }
+  });
+}
+async function deleteInfo(){
+  if(!editingInfoId) return;
+  const info=infos.find(x=>x.id===editingInfoId);
+  const title=info?info.title:'このインフォ';
+  showConfirmModal({
+    title:'インフォを削除',
+    body:`「${title}」を削除しますか？\nこの操作は取り消せません。`,
+    okLabel:'🗑️ 削除する',
+    okClass:'btn-delete',
+    onOk: async ()=>{
+      try{
+        await db.collection('infos').doc(editingInfoId).delete();
+        closeInfoModal();
+      } catch(e){
+        alert('削除に失敗しました: '+e.message);
+        console.error(e);
+      }
+    }
+  });
+}
+
+// ===== パスワード変更 =====
+function openPwChange(){
+  document.getElementById('curViewPw').textContent=PASSWORDS.view;
+  document.getElementById('curAdminPw').textContent=PASSWORDS.admin;
+  document.getElementById('newViewPw').value='';
+  document.getElementById('newAdminPw').value='';
+  const overlay=document.getElementById('pwChangeModal');
+  overlay.classList.add('open');
+  document.body.style.overflow='hidden';
+  // 背景タップで閉じる
+  overlay.onclick=(e)=>{ if(e.target===overlay) closePwChange(); };
+}
+function closePwChange(){
+  document.getElementById('pwChangeModal').classList.remove('open');
+  document.body.style.overflow='';
+}
+async function savePwChange(){
+  const v=document.getElementById('newViewPw').value.trim();
+  const a=document.getElementById('newAdminPw').value.trim();
+  if(v&&!/^\d{4}$/.test(v)){ alert('閲覧パスは4桁の数字で入力してください'); return; }
+  if(a&&!/^\d{4}$/.test(a)){ alert('管理者パスは4桁の数字で入力してください'); return; }
+  const update={};
+  if(v) update.view=v;
+  if(a) update.admin=a;
+  if(Object.keys(update).length===0){ closePwChange(); return; }
+  // 確認文言：何が変わるかを明示
+  const changes=[];
+  if(v) changes.push(`閲覧パス → ${v}`);
+  if(a) changes.push(`管理者パス → ${a}`);
+  showConfirmModal({
+    title:'パスワードを変更',
+    body:`以下のパスワードを変更します。\n\n${changes.join('\n')}\n\nよろしいですか？`,
+    okLabel:'🔑 変更する',
+    okClass:'btn-submit',
+    onOk: async ()=>{
+      try{
+        await db.collection('settings').doc('passwords').set({...update, adminKey:ADMIN_KEY}, {merge:true});
+        closePwChange();
+        alert('パスワードを変更しました');
+      } catch(e){
+        alert('保存に失敗しました: '+e.message);
+        console.error(e);
+      }
+    }
+  });
+}
+
+// ========== 起動 ==========
+// Firestoreのリアルタイム同期を開始
+startFirestoreSync();
+
+// 日程モーダルで日付を変えたら当番欄を再描画
+function setupDutyDateChange(){
+  const sDate=document.getElementById('sDate');
+  if(sDate && !sDate.dataset.dutyBound){
+    sDate.addEventListener('change', ()=>{
+      const existing=editingScheduleId?schedules.find(x=>x.id===editingScheduleId):null;
+      renderDutySection(sDate.value, existing);
+    });
+    sDate.dataset.dutyBound='1';
+  }
+}
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded', setupDutyDateChange);
+} else {
+  setupDutyDateChange();
+}
+</script>
