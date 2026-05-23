@@ -7,7 +7,7 @@
 // バージョン番号: index.htmlを更新したらこの数字を上げる
 // （これだけで全ユーザーが自動的に最新版になります）
 <<<<<<< HEAD
-const CACHE_VERSION = '2026-05-23-1917';
+const CACHE_VERSION = '2026-05-23-1925';
 =======
 const CACHE_VERSION = '2026-05-22-0030';
 >>>>>>> 2646a91633f900f6f1a232ad14c5174b88fa6e72
