@@ -1,3 +1,4 @@
+<style>html,body{margin:0;padding:0;background:#111111;}</style>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="color-scheme" content="light">
 <!-- PWA設定 -->
@@ -328,7 +329,16 @@ if ('serviceWorker' in navigator) {
   }
 </style>
 
-<div class="pw-screen" id="pwScreen">
+<!-- スプラッシュ画面：最初から表示、JSで3秒後フェード -->
+<div id="splashScreen" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#111111;display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:99999;transition:opacity 1s ease;">
+  <div style="width:140px;height:140px;border-radius:28px;overflow:hidden;margin-bottom:24px;box-shadow:0 8px 40px rgba(0,0,0,0.6);">
+    <img src="icon-180.png" alt="アンテロープス" style="width:100%;height:100%;object-fit:contain;display:block;">
+  </div>
+  <div style="color:#ffffff;font-size:28px;font-weight:900;letter-spacing:4px;">ANTELOPES</div>
+  <div style="color:#1a5c2a;font-size:13px;font-weight:700;letter-spacing:4px;margin-top:8px;">BASKETBALL CLUB · KAMIICHI</div>
+</div>
+
+<div class="pw-screen" id="pwScreen" style="display:none;">
   <div class="pw-box">
     <div style="width:64px;height:64px;border-radius:10px;background:transparent;display:flex;align-items:center;justify-content:center;margin:0 auto 12px;overflow:hidden;padding:0;box-sizing:border-box;"><img src="icon-180.png" alt="アンテロープス" style="width:100%;height:100%;object-fit:contain;display:block;"></div>
     <div class="pw-title">ANTELOPES</div>
@@ -2162,6 +2172,27 @@ async function savePwChange(){
 }
 
 // ========== 起動 ==========
+// スプラッシュ：3秒表示 → 1秒フェード → パスワード画面
+(function(){
+  function startSplash(){
+    var splash = document.getElementById('splashScreen');
+    var pw = document.getElementById('pwScreen');
+    if(!splash || !pw) return;
+    setTimeout(function(){
+      splash.style.opacity = '0';
+      setTimeout(function(){
+        splash.style.display = 'none';
+        pw.style.display = 'flex';
+      }, 1000);
+    }, 3000);
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', startSplash);
+  } else {
+    startSplash();
+  }
+})();
+
 // Firestoreのリアルタイム同期を開始
 startFirestoreSync();
 
