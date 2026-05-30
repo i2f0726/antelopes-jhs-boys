@@ -2172,7 +2172,7 @@ async function savePwChange(){
 }
 
 // ========== 起動 ==========
-// スプラッシュ：3秒表示 → 1秒フェード → パスワード画面
+// スプラッシュ：0.5秒表示 → 1秒フェード → パスワード画面
 (function(){
   function startSplash(){
     var splash = document.getElementById('splashScreen');
@@ -2184,7 +2184,7 @@ async function savePwChange(){
         splash.style.display = 'none';
         pw.style.display = 'flex';
       }, 1000);
-    }, 3000);
+    }, 500);
   }
   if(document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', startSplash);
