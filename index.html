@@ -511,6 +511,11 @@ if ('serviceWorker' in navigator) {
           <div class="duty-section-title" id="sDutySectionTitle">当番</div>
           <div id="sDutyRows"></div>
         </div>
+        <!-- 欠席選手欄（常時表示） -->
+        <div class="duty-section" id="sAbsentSection" style="margin-top:8px;">
+          <div class="duty-section-title">🙅 欠席選手</div>
+          <div id="sAbsentRows"></div>
+        </div>
         <label>メモ</label><textarea id="sMemo" placeholder="集合時間・持ち物など"></textarea>
         <div class="modal-btns">
           <button class="btn-cancel" onclick="closeScheduleModal()">キャンセル</button>
@@ -1490,8 +1495,9 @@ function buildDutyCandidates(){
 
 // 当番ラベル
 const DUTY_INFO={
-  key:  { label:'🔑 鍵当番', count:1, short:'🔑' },
-  goal: { label:'🥅 ゴール当番', count:3, short:'🥅' }
+  key:    { label:'🔑 鍵当番', count:1, short:'🔑' },
+  goal:   { label:'🥅 ゴール当番', count:3, short:'🥅' },
+  absent: { label:'🙅 欠席選手', count:0, short:'欠席' }
 };
 
 function renderCalendar(){
@@ -1523,6 +1529,10 @@ function renderCalendar(){
     // 当番表示：その日の各イベントから当番情報を抽出して短縮表示
     let dutyHtml='';
     dayEvs.forEach(e=>{
+      if(Array.isArray(e.absent) && e.absent.filter(n=>n).length>0){
+        // 欠席選手は「欠席あり」とだけ表示
+        dutyHtml+=`<div class="cal-day-duty" style="color:#c00;" title="欠席あり">🙅欠席あり</div>`;
+      }
       if(e.duty && e.duty.length){
         const info=DUTY_INFO[e.dutyType];
         if(info){
@@ -1576,10 +1586,13 @@ function openDayDetailModal(dateStr){
   const html=dayEvs.map(s=>{
     const timeStr=s.start?`${s.start}${s.end?'〜'+s.end:''}`:'';
     let dutyHtml='';
+    if(Array.isArray(s.absent) && s.absent.filter(n=>n).length>0){
+      dutyHtml+=`<div style="margin-top:6px;color:#c00;font-weight:700;font-size:17px;">🙅 欠席選手：${escapeHtml(s.absent.filter(n=>n).join('・'))}</div>`;
+    }
     if(s.dutyType && DUTY_INFO[s.dutyType] && Array.isArray(s.duty)){
       const names=s.duty.filter(n=>n);
       if(names.length){
-        dutyHtml=`<div style="margin-top:6px;color:#c97a2b;font-weight:700;font-size:17px;">${DUTY_INFO[s.dutyType].label}：${escapeHtml(names.join('・'))}</div>`;
+        dutyHtml+=`<div style="margin-top:6px;color:#c97a2b;font-weight:700;font-size:17px;">${DUTY_INFO[s.dutyType].label}：${escapeHtml(names.join('・'))}</div>`;
       }
     }
     const destHtml=s.destination
@@ -1643,10 +1656,13 @@ function renderScheduleList(){
     const timeStr=s.start?`${s.start}${s.end?'〜'+s.end:''} `:'';
     // 当番表示
     let dutyHtml='';
+    if(Array.isArray(s.absent) && s.absent.filter(n=>n).length>0){
+      dutyHtml+=`<div class="schedule-detail" style="margin-top:4px;color:#c00;font-weight:700;">🙅 欠席選手：${escapeHtml(s.absent.filter(n=>n).join('・'))}</div>`;
+    }
     if(s.duty && s.duty.length && DUTY_INFO[s.dutyType]){
       const names=s.duty.filter(n=>n);
       if(names.length){
-        dutyHtml=`<div class="schedule-detail" style="margin-top:4px;color:#c97a2b;font-weight:700;">${DUTY_INFO[s.dutyType].label}：${escapeHtml(names.join('・'))}</div>`;
+        dutyHtml+=`<div class="schedule-detail" style="margin-top:4px;color:#c97a2b;font-weight:700;">${DUTY_INFO[s.dutyType].label}：${escapeHtml(names.join('・'))}</div>`;
       }
     }
     return `<div class="schedule-item">
@@ -1691,6 +1707,8 @@ function openScheduleModal(dateStr){
   }
   // 当番欄の描画
   renderDutySection(dateStr, null);
+  // 欠席選手欄の描画
+  renderAbsentSection(null);
   document.getElementById('scheduleModal').classList.add('open');
 }
 function editSchedule(id){
@@ -1708,6 +1726,8 @@ function editSchedule(id){
   document.getElementById('sMemo').value=s.memo||'';
   // 当番欄の描画（既存の値で）
   renderDutySection(s.date, s);
+  // 欠席選手欄の描画（既存の値で）
+  renderAbsentSection(s);
   const delBtn=document.getElementById('sDeleteBtn');
   delBtn.style.display='block';
   delBtn.style.flex='1';
@@ -1724,10 +1744,9 @@ function renderDutySection(dateStr, existing){
   const set=dowSettings[String(dow)] || dowSettings[dow] || {};
   if(!set.duty || !DUTY_INFO[set.duty]){ section.style.display='none'; return; }
   const info=DUTY_INFO[set.duty];
+  // 鍵当番・ゴール当番（selectドロップダウン）
   document.getElementById('sDutySectionTitle').textContent=info.label+`（${info.count}名）`;
-  // 候補生成
   const candidates=buildDutyCandidates();
-  // 既存値（同じ当番タイプならそのまま、違う当番タイプなら空配列）
   const prev=(existing && existing.dutyType===set.duty && Array.isArray(existing.duty)) ? existing.duty : [];
   const rows=[];
   for(let i=0;i<info.count;i++){
@@ -1736,7 +1755,6 @@ function renderDutySection(dateStr, existing){
       const selAttr=(c.value===sel)?' selected':'';
       return `<option value="${escapeHtml(c.value)}"${selAttr}>${escapeHtml(c.label)}</option>`;
     }).join('');
-    // 既存値が候補に無い場合（削除された選手）は手入力テキストで保持
     const isInList=candidates.some(c=>c.value===sel);
     const customRow=(sel && !isInList)
       ? `<div style="font-size:12px;color:#c97a2b;margin-top:2px;">※ 旧データ：${escapeHtml(sel)}（保存すると消えます）</div>`
@@ -1748,8 +1766,26 @@ function renderDutySection(dateStr, existing){
   }
   document.getElementById('sDutyRows').innerHTML=rows.join('');
   section.style.display='block';
-  // データ属性で当番タイプを保持
   section.dataset.dutyType=set.duty;
+}
+
+// 欠席選手欄の描画（常時表示・チェックボックス複数選択）
+// existing: 既存scheduleオブジェクト or null
+function renderAbsentSection(existing){
+  const candidates=buildDutyCandidates();
+  const prev=(existing && Array.isArray(existing.absent)) ? existing.absent : [];
+  const checks=candidates.map(c=>{
+    const checked=prev.includes(c.value)?'checked':'';
+    return `<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:16px;cursor:pointer;">
+      <input type="checkbox" class="absent-check" value="${escapeHtml(c.value)}" ${checked}
+        style="width:18px;height:18px;accent-color:var(--theme-main);cursor:pointer;flex-shrink:0;">
+      <span>${escapeHtml(c.label)}</span>
+    </label>`;
+  }).join('');
+  const inner = candidates.length
+    ? `<div style="max-height:180px;overflow-y:auto;border:1px solid #ddd;border-radius:8px;padding:4px 8px;background:#fff;">${checks}</div>`
+    : `<div style="font-size:13px;color:var(--color-text-secondary);">選手が登録されていません</div>`;
+  document.getElementById('sAbsentRows').innerHTML=inner;
 }
 function closeScheduleModal(){ document.getElementById('scheduleModal').classList.remove('open'); }
 async function deleteSchedule(){
@@ -1798,10 +1834,10 @@ function exportExcel(){
     let dutyLabel='';
     if(s.dutyType && DUTY_INFO[s.dutyType] && Array.isArray(s.duty)){
       const names=s.duty.filter(n=>n);
-      if(names.length){
-        dutyLabel=DUTY_INFO[s.dutyType].label+'：'+names.join('・');
-      }
+      if(names.length) dutyLabel=DUTY_INFO[s.dutyType].label+'：'+names.join('・');
     }
+    const absentLabel=(Array.isArray(s.absent) && s.absent.filter(n=>n).length>0)
+      ? '欠席選手：'+s.absent.filter(n=>n).join('・') : '';
     return {
       '日付':s.date,
       '曜日':weekday,
@@ -1812,13 +1848,14 @@ function exportExcel(){
       '場所':s.place||'',
       '目的地':s.destination||'',
       '当番':dutyLabel,
+      '欠席選手':absentLabel,
       'メモ':s.memo||''
     };
   });
   // SheetJS でExcel生成
   const ws=XLSX.utils.json_to_sheet(rows);
   // 列幅設定
-  ws['!cols']=[{wch:12},{wch:6},{wch:10},{wch:30},{wch:10},{wch:10},{wch:20},{wch:30},{wch:25},{wch:30}];
+  ws['!cols']=[{wch:12},{wch:6},{wch:10},{wch:30},{wch:10},{wch:10},{wch:20},{wch:30},{wch:25},{wch:30},{wch:30}];
   const wb=XLSX.utils.book_new();
   const label=(from&&to)?`${from}_${to}`:(from?`${from}以降`:(to?`${to}まで`:'全期間'));
   XLSX.utils.book_append_sheet(wb,ws,'日程');
@@ -1860,7 +1897,10 @@ async function saveSchedule(){
     const selects=section.querySelectorAll('.duty-select');
     selects.forEach(sel=>{ duty.push(sel.value||''); });
   }
-  const data={ date, type:document.getElementById('sType').value, title, start:document.getElementById('sStart').value, end:document.getElementById('sEnd').value, place:document.getElementById('sPlace').value.trim(), destination:document.getElementById('sDestination').value.trim(), memo:document.getElementById('sMemo').value.trim(), dutyType, duty };
+  // 欠席選手を収集（当番とは独立したフィールド）
+  const absent=[];
+  document.querySelectorAll('#sAbsentRows .absent-check:checked').forEach(cb=>{ absent.push(cb.value); });
+  const data={ date, type:document.getElementById('sType').value, title, start:document.getElementById('sStart').value, end:document.getElementById('sEnd').value, place:document.getElementById('sPlace').value.trim(), destination:document.getElementById('sDestination').value.trim(), memo:document.getElementById('sMemo').value.trim(), dutyType, duty, absent };
   const isEdit=!!editingScheduleId;
   showConfirmModal({
     title: isEdit?'予定を保存':'予定を追加',
