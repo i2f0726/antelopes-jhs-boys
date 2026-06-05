@@ -517,6 +517,13 @@ if ('serviceWorker' in navigator) {
           <div id="sAbsentRows"></div>
         </div>
         <label>メモ</label><textarea id="sMemo" placeholder="集合時間・持ち物など"></textarea>
+        <!-- 通知オプション（管理者のみ表示） -->
+        <div id="sNotifySection" style="display:none;margin-top:10px;padding:10px 12px;background:#e8f5eb;border:1px dashed var(--theme-main);border-radius:8px;">
+          <label style="display:flex;align-items:center;gap:10px;font-size:15px;font-weight:700;cursor:pointer;">
+            <input type="checkbox" id="sNotify" checked style="width:18px;height:18px;accent-color:var(--theme-main);cursor:pointer;flex-shrink:0;">
+            <span>🔔 保存時にプッシュ通知を送る</span>
+          </label>
+        </div>
         <div class="modal-btns">
           <button class="btn-cancel" onclick="closeScheduleModal()">キャンセル</button>
           <button class="btn-delete" id="sDeleteBtn" onclick="deleteSchedule()" style="display:none;background:#fff0f0;color:#c00;">削除</button>
@@ -675,6 +682,7 @@ if ('serviceWorker' in navigator) {
 <!-- Firebase SDK (Compat版) -->
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 // ========== Firebase 初期化 ==========
@@ -688,6 +696,32 @@ const firebaseConfig = {
 };
 firebase.initializeApp(firebaseConfig);
 const db = firebase.firestore();
+
+// ========== FCMプッシュ通知 ==========
+const FCM_VAPID_KEY = 'BHi4uWEyN4gUYhwVU4zggbGm_0tAOniTAsbqMkfBOw9H63KuRuKJOcunET7Oszy3KS11p4juK6JiOQvnPSAbOyg';
+
+// 通知許可を求めてFCMトークンをFirestoreに登録
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) return;
+  if (!firebase.messaging) return;
+  try {
+    const permission = await Notification.requestPermission();
+    if (permission !== 'granted') return;
+    const messaging = firebase.messaging();
+    const token = await messaging.getToken({ vapidKey: FCM_VAPID_KEY });
+    if (token) {
+      // トークンをFirestoreに保存（重複しないようにトークンIDをドキュメントIDに）
+      await db.collection('fcmTokens').doc(token).set({
+        token,
+        updatedAt: Date.now(),
+        platform: /iPhone|iPad|iPod/.test(navigator.userAgent) ? 'ios' : 'android'
+      });
+      console.log('[FCM] トークン登録完了');
+    }
+  } catch (e) {
+    console.warn('[FCM] トークン取得失敗:', e);
+  }
+}
 
 // ========== 定数 ==========
 const PASSWORDS={ view:'1234', admin:'9999' };
@@ -796,6 +830,8 @@ function checkPin(){
     document.getElementById('pwScreen').style.display='none';
     document.getElementById('app').style.display='block';
     updateAdminUI(); renderPlayers(); renderCalendar(); renderInfos();
+    // ログイン後に通知許可を求める
+    setTimeout(requestNotificationPermission, 1500);
   } else {
     document.getElementById('pinErr').textContent='パスワードが違います';
     setTimeout(()=>{ pin=''; updatePin(); document.getElementById('pinErr').textContent=''; },1000);
@@ -834,6 +870,8 @@ function updateAdminUI(){
   document.getElementById('pwChangeBtn').style.display=isAdmin?'block':'none';
   document.getElementById('excelBtn').style.display=isAdmin?'block':'none';
   document.getElementById('playerExcelBtn').style.display=isAdmin?'block':'none';
+  const ns=document.getElementById('sNotifySection');
+  if(ns) ns.style.display=isAdmin?'block':'none';
   renderCalendar();
 }
 function switchTab(tab){
@@ -1900,7 +1938,10 @@ async function saveSchedule(){
   // 欠席選手を収集（当番とは独立したフィールド）
   const absent=[];
   document.querySelectorAll('#sAbsentRows .absent-check:checked').forEach(cb=>{ absent.push(cb.value); });
-  const data={ date, type:document.getElementById('sType').value, title, start:document.getElementById('sStart').value, end:document.getElementById('sEnd').value, place:document.getElementById('sPlace').value.trim(), destination:document.getElementById('sDestination').value.trim(), memo:document.getElementById('sMemo').value.trim(), dutyType, duty, absent };
+  // 通知フラグ（管理者が通知しないを選んだ場合はfalse）
+  const notifyChk=document.getElementById('sNotify');
+  const notify=notifyChk?notifyChk.checked:true;
+  const data={ date, type:document.getElementById('sType').value, title, start:document.getElementById('sStart').value, end:document.getElementById('sEnd').value, place:document.getElementById('sPlace').value.trim(), destination:document.getElementById('sDestination').value.trim(), memo:document.getElementById('sMemo').value.trim(), dutyType, duty, absent, notify };
   const isEdit=!!editingScheduleId;
   showConfirmModal({
     title: isEdit?'予定を保存':'予定を追加',
