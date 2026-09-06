@@ -1630,12 +1630,12 @@ function renderDowRow(){
     const adminCursor=isAdmin?'cursor:pointer;':'';
     let inner=`<div style="font-weight:700;font-size:13px;">${DOW_NAMES[i]}</div>`;
     if(hasSet){
-      if(set.place) inner+=`<div class="cal-dow-place">${escapeHtml(set.place)}</div>`;
-      if(set.start || set.end){
+      if(isAdmin && set.place) inner+=`<div class="cal-dow-place">${escapeHtml(set.place)}</div>`;
+      if(isAdmin && (set.start || set.end)){
         const t=`${set.start||''}${set.end?'〜'+set.end:''}`;
         inner+=`<div class="cal-dow-time">${t}</div>`;
       }
-      if(set.duty && DUTY_INFO[set.duty]){
+      if(isAdmin && set.duty && DUTY_INFO[set.duty]){
         inner+=`<div class="cal-dow-duty-label">${DUTY_INFO[set.duty].label}</div>`;
       }
     } else if(isAdmin){
