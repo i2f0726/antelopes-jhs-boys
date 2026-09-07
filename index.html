@@ -1483,12 +1483,8 @@ function buildDutyCandidates(){
   // ラベル生成
   return list.map(p=>{
     const ln=extractLastName(p.name);
-    const isDup=lastNameCount[ln]>1;
-    // 下の名前を抽出（スペース区切りなら2要素目以降、なければ苗字以外の部分）
-    const trimmed=(p.name||'').trim();
-    const parts=trimmed.split(/[\s　]+/);
-    const firstName=parts.length>=2 ? parts.slice(1).join(' ') : trimmed.slice(ln.length);
-    const label=isDup && firstName ? `${ln}（${firstName}）` : ln;
+    // 候補ラベルは常にフルネームを表示する（苗字が長い名前だと下の名前が欠落するバグを回避）
+    const label=(p.name||'').trim();
     return { value:p.name, label, lastName:ln, fullName:p.name };
   });
 }
@@ -1536,7 +1532,7 @@ function renderCalendar(){
       if(e.duty && e.duty.length){
         const info=DUTY_INFO[e.dutyType];
         if(info){
-          const names=e.duty.filter(n=>n).map(n=>extractLastName(n)).join('/');
+          const names=e.duty.filter(n=>n).join('/');
           if(names) dutyHtml+=`<div class="cal-day-duty" title="${info.label}：${e.duty.filter(n=>n).join('・')}">${info.short}${names}</div>`;
         }
       }
