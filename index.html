@@ -327,6 +327,8 @@ if ('serviceWorker' in navigator) {
     .grid { gap:8px; padding:8px; }
     .pin-disp { font-size:28px; letter-spacing:12px; }
   }
+  .a8-ad { flex-direction:column; }
+  .a8-pr { display:block; font-size:10px; line-height:1.4; color:var(--color-text-secondary); letter-spacing:0.5px; margin-bottom:2px; text-align:center; }
 </style>
 
 <!-- スプラッシュ画面：最初から表示、JSで3秒後フェード -->
@@ -373,6 +375,7 @@ if ('serviceWorker' in navigator) {
   <div class="header-stripe"></div>
   <!-- A8広告（ヘッダー下） -->
   <div class="a8-ad" style="text-align:center;padding:8px 0;background:var(--color-background-tertiary);line-height:0;">
+    <span class="a8-pr">PR</span>
     <a href="https://px.a8.net/svt/ejp?a8mat=4BCJJS+6NXU76+4ABU+5ZEMP" rel="nofollow" target="_blank">
     <img border="0" width="320" height="50" alt="" src="https://www21.a8.net/svt/bgt?aid=260925688403&wid=007&eno=01&mid=s00000020001001005000&mc=1" style="max-width:100%;height:auto;"></a>
     <img border="0" width="1" height="1" src="https://www17.a8.net/0.gif?a8mat=4BCJJS+6NXU76+4ABU+5ZEMP" alt="" style="position:absolute;">
@@ -604,6 +607,7 @@ if ('serviceWorker' in navigator) {
       </div>
       <!-- A8広告（カレンダー下） -->
       <div class="a8-ad" style="display:flex;justify-content:center;align-items:center;padding:10px 0;">
+        <span class="a8-pr">PR</span>
         <a href="https://px.a8.net/svt/ejp?a8mat=4BCKBU+C50BFM+3OSK+69P01" rel="nofollow" target="_blank">
         <img border="0" width="320" height="50" alt="" src="https://www29.a8.net/svt/bgt?aid=260926698734&wid=007&eno=01&mid=s00000017210001053000&mc=1" style="display:block;max-width:100%;height:auto;"></a>
         <img border="0" width="1" height="1" src="https://www14.a8.net/0.gif?a8mat=4BCKBU+C50BFM+3OSK+69P01" alt="" style="position:absolute;width:1px;height:1px;">
